@@ -43,11 +43,57 @@ int net_device_register(struct net_device *dev)
 static int
 net_device_open(struct net_device *dev)
 {
+    /* デバイスの状態を確認(既にUP状態の場合はエラーを返す) */
+    if (NET_DEVICE_IS_UP(dev))
+    {
+        errorf("already opend, dev=%s", dev->name);
+        return -1;
+    }
+
+    /* デバイスドライバのオープン関数を呼び出す
+       オープン関数が設定されてない場合は呼び出しをスキップ
+       エラーが返されたらこの関数もエラーを返す */
+    if (dev->ops->open)
+    {
+        if (dev->ops->open(dev) == -1)
+        {
+            errorf("failure, dev=%s", dev->name);
+            return -1;
+        }
+    }
+
+    /* UPフラグを立てる */
+    dev->flags |= NET_DEVICE_FLAG_UP;
+    infof("dev=%s, state=%s", dev->name, NET_DEVICE_STATE(dev));
+    return 0;
 }
 
 static int
 net_device_close(struct net_device *dev)
 {
+    /* デバイスの状態を確認(UPでない場合はエラーを返す) */
+    if (!NET_DEVICE_IS_UP(dev))
+    {
+        errorf("not opened, dev=%s", dev->name);
+        return -1;
+    }
+
+    /* デバイスのクローズ関数を呼び出す
+       クローズ関数が設定されてない場合は呼び出しをスキップ
+       エラーが返されたらこの関数もエラーを返す */
+    if (dev->ops->close)
+    {
+        if (dev->ops->close(dev) == -1)
+        {
+            errorf("failure, dev=%s", dev->name);
+            return -1;
+        }
+    }
+
+    /* UPフラグを落とす */
+    dev->flags &= ~NET_DEVICE_FLAG_UP; /* ~は論理否定(各ビットを反転させる) */
+    infof("dev=%s, state=%s", dev->name, NET_DEVICE_STATE(dev));
+    return 0;
 }
 
 int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst)
