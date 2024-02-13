@@ -125,8 +125,15 @@ int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data
     return 0;
 }
 
+/**
+ * デバイスが受信したパケットをプロトコルスタックに渡す関数
+ * プロトコルスタックへのデータの入口であり、デバイスドライバから呼び出されることを想定している
+ */
 int net_input_handler(uint16_t type, const uint8_t *data, size_t len, struct net_device *dev)
 {
+    debugf("dev=%s, type=0x%04x, len=%zu", dev->name, type, len);
+    debugdump(data, len);
+    return 0;
 }
 
 int net_run(void)
