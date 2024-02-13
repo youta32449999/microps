@@ -98,6 +98,31 @@ net_device_close(struct net_device *dev)
 
 int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst)
 {
+    /* デバイスの状態を確認(UP状態でなければ送信できないのでエラーを返す) */
+    if (!NET_DEVICE_IS_UP(dev))
+    {
+        errorf("not opened, dev=%s", dev->name);
+        return -1;
+    }
+
+    /* データサイズを確認(デバイスのMTUを超えるサイズのデータは送信できないのでエラーを返す) */
+    if (len > dev->mtu)
+    {
+        errorf("too long, dev=%s, mtu=%u, len=%zu", dev->name, dev->mtu, len);
+        return -1;
+    }
+
+    debugf("dev=%s, type=0x%04x, len=%zu", dev->name, type, len);
+    debugdump(data, len);
+
+    /* デバイスドライバの出力関数を呼び出す(エラーが返されたらこの関数もエラーを返す) */
+    if (dev->ops->transmit(dev, type, data, len, dst) == -1)
+    {
+        errorf("device transmit failure, dev=%s, len=%zu", dev->name, len);
+        return -1;
+    }
+
+    return 0;
 }
 
 int net_input_handler(uint16_t type, const uint8_t *data, size_t len, struct net_device *dev)
