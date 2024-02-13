@@ -8,16 +8,36 @@
 #include "net.h"
 
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
-static struct net_device *devices;
+static struct net_device *devices; /* デバイスリスト(リストの先頭を指すポインタ) */
 
 struct net_device *
 net_device_alloc(void)
 {
+    struct net_device *dev;
+
+    dev = memory_alloc(sizeof(*dev));
+    if (!dev)
+    {
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+    return dev;
 }
 
 /* NOTE: must not be call after net_run() */
 int net_device_register(struct net_device *dev)
 {
+    static unsigned int index = 0;
+
+    dev->index = index++;                                        /* デバイスのインデックス番号を設定 */
+    snprintf(dev->name, sizeof(dev->name), "net%d", dev->index); /* デバイス名を生成(net0, net1, net2, ...) */
+
+    /* デバイスリストの先頭に追加 */
+    dev->next = devices;
+    devices = dev;
+
+    infof("registered, dev=%s, type=0x%04x", dev->name, dev->type);
+    return 0;
 }
 
 static int

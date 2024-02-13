@@ -9,6 +9,10 @@
  * Memory
  */
 
+/**
+ * メモリを確保し、0で初期化する
+ * メモリが確保できなかったらエラーとしてNULLを返却する
+ */
 static inline void *
 memory_alloc(size_t size)
 {
