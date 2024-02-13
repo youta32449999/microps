@@ -25,24 +25,28 @@
 
 struct net_device
 {
-    struct net_device *next;
+    struct net_device *next; /* 次のデバイスへのポインタ */
     unsigned int index;
     char name[IFNAMSIZ];
-    uint16_t type;
-    uint16_t mtu;
-    uint16_t flags;
-    uint16_t hlen; /* header length */
-    uint16_t alen; /* address length */
+    uint16_t type;  /* デバイスの種別(net.hにNET_DEVICE_TYPE_XXXとして定義) */
+    uint16_t mtu;   /*デバイスのMTU(Maximum Transmission Unit)の値 */
+    uint16_t flags; /* 各種フラグ(net.hにNET_DEVICE_FLAG_XXXとして定義) */
+    uint16_t hlen;  /* header length */
+    uint16_t alen;  /* address length */
     uint8_t addr[NET_DEVICE_ADDR_LEN];
     union
     {
         uint8_t peer[NET_DEVICE_ADDR_LEN];
         uint8_t broadcast[NET_DEVICE_ADDR_LEN];
     };
-    struct net_device_ops *ops;
-    void *priv;
+    struct net_device_ops *ops; /* デバイスドライバに実装されている関数が設定されたstruct net_device_opsへのポインタ */
+    void *priv;                 /* デバイスドライバが使うプライベートなデータへのポインタ */
 };
 
+/**
+ * デバイスドライバに実装されている関数へのポインタを格納
+ * 送信関数(transmit)は必須。それ以外の関数は任意
+ */
 struct net_device_ops
 {
     int (*open)(struct net_device *dev);
