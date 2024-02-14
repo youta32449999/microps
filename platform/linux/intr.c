@@ -23,8 +23,8 @@ static struct irq_entry *irqs; /* IRQリスト(リストの先頭を指すポイ
 
 static sigset_t sigmask; /* シグナル集合(シグナルマスク用) */
 
-static pthread_t tid;
-static pthread_barrier_t barrier;
+static pthread_t tid;             /* 割り込みスレッドのスレッドID */
+static pthread_barrier_t barrier; /* スレッド間同期のためのバリア */
 
 int intr_request_irq(unsigned int irq, int (*handler)(unsigned int irq, void *dev), int flags, const char *name, void *dev)
 {
@@ -81,12 +81,61 @@ intr_thread(void *arg)
 
 int intr_run(void)
 {
+    int err;
+
+    /* シグナルマスクの設定 */
+    err = pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
+    if (err)
+    {
+        errorf("pthread_sigmask() %s", strerror(err));
+        return -1;
+    }
+
+    /* 割り込み処理スレッドの起動 */
+    err = pthread_create(&tid, NULL, intr_thread, NULL);
+    if (err)
+    {
+        errorf("pthread_create() %s", strerror(err));
+        return -1;
+    }
+
+    /* スレッドが動き出すまで待つ
+       (他のスレッドが同じようにpthread_barrier_wait()を呼び出し、
+       バリアのカウントが指定の数になるまでスレッドを停止する) */
+    pthread_barrier_wait(&barrier);
+
+    return 0;
 }
 
 void intr_shutdown(void)
 {
+    /* 割り込み処理スレッドが起動済みかどうか確認 */
+    if (pthread_equal(tid, pthread_self()) != 0)
+    {
+        /* Thread not created. */
+        return;
+    }
+
+    /* 割り込み処理スレッドにシグナル(SIGHUP)を送信 */
+    pthread_kill(tid, SIGHUP);
+
+    /* 割り込み処理スレッドが完全に終了するのを待つ */
+    pthread_join(tid, NULL);
 }
 
 int intr_init(void)
 {
+    /* スレッドIDの初期値にメインスレッドのIDを設定する */
+    tid = pthread_self();
+
+    /* pthread_barrierの初期化(カウントを2に設定) */
+    pthread_barrier_init(&barrier, NULL, 2);
+
+    /* シグナル集合を初期化(空にする) */
+    sigemptyset(&sigmask);
+
+    /* シグナル集合にSIGHUPを追加(割り込みスレッド終了通知用) */
+    sigaddset(&sigmask, SIGHUP);
+
+    return 0;
 }
