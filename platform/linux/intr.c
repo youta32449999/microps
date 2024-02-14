@@ -72,6 +72,8 @@ int intr_request_irq(unsigned int irq, int (*handler)(unsigned int irq, void *de
 
 int intr_raise_irq(unsigned int irq)
 {
+    /* 割り込み処理スレッドへシグナルを送信 */
+    return pthread_kill(tid, (int)irq);
 }
 
 /* 割り込みスレッドのエントリポイント */
