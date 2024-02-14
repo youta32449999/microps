@@ -74,9 +74,52 @@ int intr_raise_irq(unsigned int irq)
 {
 }
 
+/* 割り込みスレッドのエントリポイント */
 static void *
 intr_thread(void *arg)
 {
+    int terminate = 0, sig, err;
+    struct irq_entry *entry;
+
+    debugf("start...");
+
+    /* メインスレッドと同期を取るための処理 */
+    pthread_barrier_wait(&barrier);
+    while (!terminate)
+    {
+        /* 割り込みに見立てたシグナルが発生するまで待機 */
+        err = sigwait(&sigmask, &sig);
+        if (err)
+        {
+            errorf("sigwait() %s", strerror(err));
+            break;
+        }
+
+        /* 発生したシグナルの種類に応じた処理を記述 */
+        switch (sig)
+        {
+        /* 割り込みスレッドへ終了を通知するためのシグナル */
+        case SIGHUP:
+            terminate = 1;
+            break;
+        /* デバイス割り込み用のシグナル */
+        default:
+            /* IRQリストを巡回 */
+            for (entry = irqs; entry; entry = entry->next)
+            {
+                /* IRQ番号が一致するエントリの割り込みハンドラを呼び出す */
+                if (entry->irq == (unsigned int)sig)
+                {
+                    debugf("irq=%d, name=%s", entry->irq, entry->name);
+                    entry->handler(entry->irq, entry->dev);
+                }
+            }
+            break;
+        }
+    }
+
+    debugf("terminated");
+    return NULL;
 }
 
 int intr_run(void)
