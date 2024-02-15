@@ -84,6 +84,39 @@ loopback_transmit(struct net_device *dev, uint16_t type, const uint8_t *data, si
 static int
 loopback_isr(unsigned int irq, void *id)
 {
+    struct net_device *dev;
+    struct loopback_queue_entry *entry;
+
+    dev = (struct net_device *)id;
+
+    /* キューへのアクセスをmutexで保護 */
+    mutex_lock(&PRIV(dev)->mutex);
+
+    while (1)
+    {
+        /* キューからエントリを取り出す */
+        entry = queue_pop(&PRIV(dev)->queue);
+
+        /* 取り出すエントリがなくなったらループを抜ける */
+        if (!entry)
+        {
+            break;
+        }
+
+        debugf("queue popped(num;%u), dev=%s, type=0x%04x, len=%zd", PRIV(dev)->queue.num, dev->name, entry->type, entry->len);
+        debugdump(entry->data, entry->len);
+
+        /* net_input_handler()に受信データ本体と付随する情報を渡す */
+        net_input_handler(entry->type, entry->data, entry->len, dev);
+
+        /* エントリのメモリを解放する */
+        memory_free(entry);
+    }
+
+    /* mutexのunlockを忘れずに行う */
+    mutex_unlock(&PRIV(dev)->mutex);
+
+    return 0;
 }
 
 static struct net_device_ops loopback_ops = {
