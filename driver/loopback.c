@@ -22,6 +22,13 @@ struct loopback
     struct queue_head queue;
 };
 
+/**
+ * キューのエントリの構造体
+ * データ本体と付随する情報(メタデータ)を格納
+ * この構造体の最後のメンバは"フレキシブル配列メンバ"と呼ばれる特殊なメンバ変数
+ * ・構造体の最後にだけ配置できるサイズ不明の配列
+ * ・メンバ変数としてアクセスできるが構造体のサイズには含まれない(必ずデータ部分も含めてメモリを確保すること)
+ */
 struct loopback_queue_entry
 {
     uint16_t type;
@@ -32,6 +39,46 @@ struct loopback_queue_entry
 static int
 loopback_transmit(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst)
 {
+    struct loopback_queue_entry *entry;
+    unsigned int num;
+
+    /* キューへのアクセスをmutexで保護する(unlockを忘れずに) */
+    mutex_lock(&PRIV(dev)->mutex);
+
+    /* キューの上限を超えていたらエラーを返す */
+    if (PRIV(dev)->queue.num >= LOOPBACK_QUEUE_LIMIT)
+    {
+        mutex_unlock(&PRIV(dev)->mutex);
+        errorf("queue is full");
+        return -1;
+    }
+
+    /* キューに格納するエントリのメモリを確保(エントリ構造体+データ長) */
+    entry = memory_alloc(sizeof(*entry) + len);
+    if (!entry)
+    {
+        mutex_unlock(&PRIV(dev)->mutex);
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+
+    /* メタデータの設定とデータ本体のコピー */
+    entry->type = type;
+    entry->len = len;
+    memcpy(entry->data, data, len);
+
+    /* エントリをキューへ格納 */
+    queue_push(&PRIV(dev)->queue, entry);
+    num = PRIV(dev)->queue.num;
+    mutex_unlock(&PRIV(dev)->mutex);
+
+    debugf("queue pushed (num:%u), dev=%s, type=0x%04x, len=%zd", num, dev->name, type, len);
+    debugdump(data, len);
+
+    /* 割り込みを発生させる */
+    intr_raise_irq(PRIV(dev)->irq);
+
+    return 0;
 }
 
 static int
