@@ -11,9 +11,9 @@
 struct net_protocol
 {
     struct net_protocol *next;
-    uint16_t type;
-    struct queue_head queue; /* input queue */
-    void (*handler)(const uint8_t *data, size_t len, struct net_device *dev);
+    uint16_t type;                                                            /* プロトコルの種別(net.hにNET_PROTOCOL_TYPE_XXXとして定義) */
+    struct queue_head queue;                                                  /* input queue */
+    void (*handler)(const uint8_t *data, size_t len, struct net_device *dev); /* プロトコルの入力関数へのポインタ */
 };
 
 struct net_protocol_queue_entry
@@ -24,8 +24,8 @@ struct net_protocol_queue_entry
 };
 
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
-static struct net_device *devices; /* デバイスリスト(リストの先頭を指すポインタ) */
-static struct net_protocol *protocols;
+static struct net_device *devices;     /* デバイスリスト(リストの先頭を指すポインタ) */
+static struct net_protocol *protocols; /* 登録されているプロトコルのリスト */
 
 struct net_device *
 net_device_alloc(void)
@@ -145,6 +145,34 @@ int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data
 /* NOTE: must not be call after net_run() */
 int net_protocol_register(uint16_t type, void (*handler)(const uint8_t *data, size_t len, struct net_device *dev))
 {
+    struct net_protocol *proto;
+
+    /* 重複登録の確認(指定された種別のプロトコルが登録済みの場合はエラーを返す) */
+    for (proto = protocols; proto; proto = proto->next)
+    {
+        if (type == proto->type)
+        {
+            errorf("already registerd, type=0x%04x", type);
+            return -1;
+        }
+    }
+
+    proto = memory_alloc(sizeof(*proto));
+    if (!proto)
+    {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    /* プロトコル種別と入力関数を設定 */
+    proto->type = type;
+    proto->handler = handler;
+
+    /* プロトコルリストの先頭に追加 */
+    proto->next = protocols;
+    protocols = proto;
+
+    infof("registered, type=0x%04x", type);
+    return 0;
 }
 
 /**
