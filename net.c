@@ -259,6 +259,8 @@ void net_shutdown(void)
     debugf("shutting down");
 }
 
+#include "ip.h"
+
 int net_init(void)
 {
     /* 割り込み機能の初期化 */
@@ -267,6 +269,14 @@ int net_init(void)
         errorf("intr_init() failure");
         return -1;
     }
+
+    /* プロトコルスタック初期化時にIPの初期化関数を呼び出す */
+    if (ip_init() == -1)
+    {
+        errorf("ip_init() failure");
+        return -1;
+    }
+
     infof("initialized");
     return 0;
 }
