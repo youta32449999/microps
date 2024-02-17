@@ -105,6 +105,10 @@ intr_thread(void *arg)
         case SIGHUP:
             terminate = 1;
             break;
+        /* ソフトウェア割り込み用のシグナル */
+        case SIGUSR1:
+            net_softirq_handler();
+            break;
         /* デバイス割り込み用のシグナル */
         default:
             /* IRQリストを巡回 */
@@ -182,6 +186,8 @@ int intr_init(void)
 
     /* シグナル集合にSIGHUPを追加(割り込みスレッド終了通知用) */
     sigaddset(&sigmask, SIGHUP);
+    /* シグナル集合にSIGUSR1を追加(ソフトウェア割り込み用) */
+    sigaddset(&sigmask, SIGUSR1);
 
     return 0;
 }
