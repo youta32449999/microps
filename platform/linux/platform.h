@@ -61,6 +61,7 @@ mutex_unlock(mutex_t *mutex)
  * (SIGRTMINに関してはglibcが内部的に利用しているため+1した番号から利用するようにしている)
  */
 #define INTR_IRQ_BASE (SIGRTMIN + 1)
+#define INTR_IRQ_SOFTIRQ SIGUSR1
 
 #define INTR_IRQ_SHARED 0x0001
 
