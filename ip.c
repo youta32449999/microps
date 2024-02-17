@@ -108,6 +108,35 @@ ip_dump(const uint8_t *data, size_t len)
 struct ip_iface *
 ip_iface_alloc(const char *unicast, const char *netmask)
 {
+    struct ip_iface *iface;
+
+    /* IPインタフェースのメモリを確保 */
+    iface = memory_alloc(sizeof(*iface));
+    if (!iface)
+    {
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+
+    /* インタフェースの種別を示すfamilyの値を設定 */
+    NET_IFACE(iface)->family = NET_IFACE_FAMILY_IP;
+
+    /* IPインタフェースにアドレス情報を設定*/
+    if (ip_addr_pton(unicast, &iface->unicast) == -1)
+    {
+        errorf("ip_addr_pton() failure, addr=%s", unicast);
+        memory_free(iface);
+        return NULL;
+    }
+    if (ip_addr_pton(netmask, &iface->netmask) == -1)
+    {
+        errorf("ip_addr_pton() failure, addr=%s", netmask);
+        memory_free(iface);
+        return NULL;
+    }
+    iface->broadcast = (iface->unicast & iface->netmask) | ~iface->netmask;
+
+    return iface;
 }
 
 /* NOTE: must not be call after net_run() */
