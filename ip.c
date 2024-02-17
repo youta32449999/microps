@@ -103,6 +103,56 @@ ip_dump(const uint8_t *data, size_t len)
 static void
 ip_input(const uint8_t *data, size_t len, struct net_device *dev)
 {
+    struct ip_hdr *hdr;
+    uint8_t v;
+    uint16_t hlen, total, offset;
+
+    /* 入力データの長さがIPヘッダの最小サイズより小さい場合はエラー */
+    if (len < IP_HDR_SIZE_MIN)
+    {
+        errorf("too short");
+        return;
+    }
+
+    /* 入力データをIPヘッダ構造体のポインタへキャスト */
+    hdr = (struct ip_hdr *)data;
+
+    /* IPデータグラムの検証 */
+    v = hdr->vhl >> 4;
+    if (v != IP_VERSION_IPV4)
+    {
+        errorf("ip version error: v=%u", v);
+        return;
+    }
+    hlen = (hdr->vhl & 0x0f) << 2;
+    if (len < hlen)
+    {
+        errorf("header length error: len=%zu < hlen=%u", len, hlen);
+        return;
+    }
+    total = ntoh16(hdr->total);
+    if (len < total)
+    {
+        errorf("total length error: len=%zu < total=%u", len, total);
+        return;
+    }
+    if (cksum16((uint16_t *)hdr, hlen, 0) != 0)
+    {
+        errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, hlen, -hdr->sum)));
+        return;
+    }
+
+    /* 今回はIPのフラグメントをサポートしないのでフラグメントだったら処理せず中断する
+       フラグメントかどうかの判断はMF(More Flagments)ビットが立っている or フラグメントオフセットに値がある */
+    offset = ntoh16(hdr->offset);
+    if (offset & 0x2000 || offset & 0x1fff)
+    {
+        errorf("fragments does not support");
+        return;
+    }
+
+    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+    ip_dump(data, total);
 }
 
 int ip_init(void)
