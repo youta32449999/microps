@@ -283,6 +283,55 @@ ip_generate_id(void)
 ssize_t
 ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
 {
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
+    uint16_t id;
+
+    if (src == IP_ADDR_ANY)
+    {
+        errorf("ip routing does not implement");
+        return -1;
+    }
+    else
+    {
+        /* IPインタフェースの検索 */
+        iface = ip_iface_select(src);
+        if (!iface)
+        {
+            errorf("iface not found, src=%s", ip_addr_ntop(src, addr, sizeof(addr)));
+            return -1;
+        }
+
+        /* 宛先への到達可能か確認
+         * 宛先アドレスが下記の条件のどちらも満たさない場合は到達不能としてエラーを返す
+         * 1. インタフェースのネットワークアドレスの範囲に含まれる
+         * 2. ブロードキャストIPアドレス(255.255.255.255)
+         */
+        if ((dst & iface->netmask) != (iface->unicast & iface->netmask) && dst != IP_ADDR_BROADCAST)
+        {
+            errorf("not reached, dst=%s", ip_addr_ntop(src, addr, sizeof(addr)));
+            return -1;
+        }
+    }
+
+    /* フラグメンテーションをサポートしないのでMTUを超える場合はエラーを返す */
+    if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len)
+    {
+        errorf("too long, dev=%s, mtu=%u < %zu",
+               NET_IFACE(iface)->dev->name, NET_IFACE(iface)->dev->mtu, IP_HDR_SIZE_MIN + len);
+        return -1;
+    }
+
+    /* IPデータグラムのIDを採番 */
+    id = ip_generate_id();
+
+    /* IPデータグラムを生成して出力するための関数を呼び出す */
+    if (ip_output_core(iface, protocol, data, len, iface->unicast, dst, id, 0) == -1)
+    {
+        errorf("ip_output_core() failure");
+        return -1;
+    }
+    return len;
 }
 
 int ip_init(void)
