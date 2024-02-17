@@ -187,6 +187,8 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     struct ip_hdr *hdr;
     uint8_t v;
     uint16_t hlen, total, offset;
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
 
     /* 入力データの長さがIPヘッダの最小サイズより小さい場合はエラー */
     if (len < IP_HDR_SIZE_MIN)
@@ -232,7 +234,24 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
         return;
     }
 
-    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+    /* IPデータグラムのフィルタリング */
+    iface = (struct ip_iface *)net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+    if (!iface)
+    {
+        /* iface is not registered to the device */
+        return;
+    }
+    if (hdr->dst != iface->unicast)
+    {
+        if (hdr->dst != iface->broadcast && hdr->dst != IP_ADDR_BROADCAST)
+        {
+            /* for other host */
+            return;
+        }
+    }
+
+    debugf("dev=%s, iface=%s, protocol=%u, total=%u",
+           dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
     ip_dump(data, total);
 }
 
