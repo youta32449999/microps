@@ -28,6 +28,7 @@
 #define NET_PROTOCOL_TYPE_ARP 0x0806
 #define NET_PROTOCOL_TYPE_IPV6 0x86dd
 
+/* インタフェースの種別(ファミリ)の値 */
 #define NET_IFACE_FAMILY_IP 1
 #define NET_IFACE_FAMILY_IPV6 2
 
@@ -65,11 +66,12 @@ struct net_device_ops
     int (*transmit)(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst);
 };
 
+/* 抽象的なインタフェース構造体(デバイスにインタフェースを紐づける仕組みだけ) */
 struct net_iface
 {
-    struct net_iface *next;
-    struct net_device *dev; /* back pointer to parent */
-    int family;
+    struct net_iface *next; /* 次のインタフェースへのポインタ */
+    struct net_device *dev; /* back pointer to parent(インタフェースが紐づけられてるデバイスへのポインタ) */
+    int family;             /* 具体的なインタフェースの種別 */
     /* depends on implementation of protocols. */
 };
 
