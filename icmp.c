@@ -95,11 +95,27 @@ icmp_dump(const uint8_t *data, size_t len)
 
 void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface)
 {
+    struct icmp_hdr *hdr;
     char addr1[IP_ADDR_STR_LEN];
     char addr2[IP_ADDR_STR_LEN];
 
+    /* ICMPメッセージの検証 */
+    /* 入力データがICMPヘッダサイズ未満の場合はエラーメッセージを出力して中断 */
+    if (len < ICMP_HDR_SIZE)
+    {
+        errorf("too short");
+        return;
+    }
+    /* チェックサムの検証 */
+    hdr = (struct icmp_hdr *)data;
+    if (cksum16((uint16_t *)hdr, len, 0) != 0)
+    {
+        errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, len, -hdr->sum)));
+        return;
+    }
+
     debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)), len);
-    debugdump(data, len);
+    icmp_dump(data, len);
 }
 
 int icmp_init(void)
