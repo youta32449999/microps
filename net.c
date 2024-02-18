@@ -337,6 +337,7 @@ void net_shutdown(void)
 }
 
 #include "ip.h"
+#include "icmp.h"
 
 int net_init(void)
 {
@@ -351,6 +352,13 @@ int net_init(void)
     if (ip_init() == -1)
     {
         errorf("ip_init() failure");
+        return -1;
+    }
+
+    /* プロトコルスタック初期化時にICMPの初期化関数を呼び出してICMPをIPに登録する */
+    if (icmp_init() == -1)
+    {
+        errorf("icmp_init() failure");
         return -1;
     }
 
