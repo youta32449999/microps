@@ -119,6 +119,18 @@ void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, s
 
     debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)), len);
     icmp_dump(data, len);
+
+    switch (hdr->type)
+    {
+    case ICMP_TYPE_ECHO:
+        /* ICMPの出力関数を呼び出す。メッセージ種別以外のパラメータは受信メッセージに含まれる値をそのまま返す */
+        /* Responds with the address of the received infterface. */
+        icmp_output(ICMP_TYPE_ECHOREPLY, hdr->code, hdr->values, (uint8_t *)(hdr + 1), len - ICMP_HDR_SIZE, iface->unicast, src);
+        break;
+    default:
+        /* ignore */
+        break;
+    }
 }
 
 int icmp_output(uint8_t type, uint8_t code, uint32_t values, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
