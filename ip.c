@@ -30,6 +30,10 @@ struct ip_hdr
     uint8_t options[]; /* オプション(可変長なのでフレキシブル配列メンバとする) */
 };
 
+/**
+ * IPの上位プロトコルを管理するための構造体
+ * struct net_protocolとほぼ同じ
+ */
 struct ip_protocol
 {
     struct ip_protocol *next;
@@ -41,8 +45,8 @@ const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
-static struct ip_iface *ifaces; /* 登録されているすべてのIPインタフェースのリスト */
-static struct ip_protocol *protocols;
+static struct ip_iface *ifaces;       /* 登録されているすべてのIPインタフェースのリスト */
+static struct ip_protocol *protocols; /* 登録されているプロトコルのリスト */
 
 /* IPアドレスを文字列からネットワークバイトオーダーのバイナリ値(ip_addr_t)に変換 */
 int ip_addr_pton(const char *p, ip_addr_t *n)
