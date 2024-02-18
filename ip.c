@@ -198,6 +198,34 @@ ip_iface_select(ip_addr_t addr)
 /* NOTE: must not be call after net_run() */
 int ip_protocol_register(uint8_t type, void (*handler)(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface))
 {
+    struct ip_protocol *entry;
+
+    /* 重複登録の確認 */
+    for (entry = protocols; entry; entry = entry->next)
+    {
+        if (entry->type == type)
+        {
+            errorf("already exists, type=%u", type);
+            return -1;
+        }
+    }
+
+    /* プロトコルの登録 */
+    entry = memory_alloc(sizeof(*entry));
+    if (!entry)
+    {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    entry->type = type;
+    entry->handler = handler;
+
+    /* プロトコルリストの先頭に挿入 */
+    entry->next = protocols;
+    protocols = entry;
+
+    infof("registered, type=%u", entry->type);
+    return 0;
 }
 
 static void
