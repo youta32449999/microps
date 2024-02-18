@@ -236,6 +236,7 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     uint16_t hlen, total, offset;
     struct ip_iface *iface;
     char addr[IP_ADDR_STR_LEN];
+    struct ip_protocol *proto;
 
     /* 入力データの長さがIPヘッダの最小サイズより小さい場合はエラー */
     if (len < IP_HDR_SIZE_MIN)
@@ -300,6 +301,19 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
     debugf("dev=%s, iface=%s, protocol=%u, total=%u",
            dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol, total);
     ip_dump(data, total);
+
+    /* IPヘッダのプロトコル番号と一致するプロトコルの入力関数を呼び出す */
+    for (proto = protocols; proto; proto = proto->next)
+    {
+        if (proto->type == hdr->protocol)
+        {
+            /* ヘッダの先頭からヘッダの長さ(hlen)だけ足した位置にIPデータグラムのペイロードがある */
+            proto->handler((uint8_t *)hdr + hlen, total - hlen, hdr->src, hdr->dst, iface);
+            return;
+        }
+    }
+
+    /* unsupported protocol */
 }
 
 static int
