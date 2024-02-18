@@ -5,6 +5,10 @@
 #include "ip.h"
 #include "icmp.h"
 
+/**
+ * ICMPヘッダ構造体
+ * メッセージ固有のフィールドは単なる32bitの値として扱う
+ */
 struct icmp_hdr
 {
     uint8_t type;
@@ -13,6 +17,10 @@ struct icmp_hdr
     uint32_t values;
 };
 
+/**
+ * Echo/EchoReplyメッセージ構造体
+ * メッセージ種別を判別した段階でこちらにキャストする
+ */
 struct icmp_echo
 {
     uint8_t type;
