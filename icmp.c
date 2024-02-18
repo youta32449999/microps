@@ -64,6 +64,33 @@ icmp_type_ntoa(uint8_t type)
 static void
 icmp_dump(const uint8_t *data, size_t len)
 {
+    struct icmp_hdr *hdr;
+    struct icmp_echo *echo;
+
+    flockfile(stderr);
+    /* 全メッセージ共通のフィールド */
+    hdr = (struct icmp_hdr *)data;
+    fprintf(stderr, "       type: %u (%s)\n", hdr->type, icmp_type_ntoa(hdr->type));
+    fprintf(stderr, "       code: %u\n", hdr->code);
+    fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
+
+    switch (hdr->type)
+    {
+    /* Echo/EchoReplyの場合には詳細を出力 */
+    case ICMP_TYPE_ECHOREPLY:
+    case ICMP_TYPE_ECHO:
+        echo = (struct icmp_echo *)hdr;
+        fprintf(stderr, "         id: %u\n", ntoh16(echo->id));
+        fprintf(stderr, "        seq: %u\n", ntoh16(echo->seq));
+        break;
+    /* その他のメッセージの場合には32bitの値をそのまま出力 */
+    default:
+        fprintf(stderr, "     values: 0x%08x\n", ntoh32(hdr->values));
+    }
+#ifdef HEXDUMP
+    hexdump(stderr, data, len);
+#endif
+    funlockfile(stderr);
 }
 
 void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface)
