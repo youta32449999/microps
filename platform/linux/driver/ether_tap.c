@@ -159,11 +159,56 @@ int ether_tap_transmit(struct net_device *dev, uint16_t type, const uint8_t *buf
 static ssize_t
 ether_tap_read(struct net_device *dev, uint8_t *buf, size_t size)
 {
+    ssize_t len;
+
+    /* read()で読み出すだけ */
+    len = read(PRIV(dev)->fd, buf, size);
+    if (len <= 0)
+    {
+        if (len == -1 && errno != EINTR)
+        {
+            errorf("read: %s, dev=%s", strerror(errno), dev->name);
+        }
+        return -1;
+    }
+    return len;
 }
 
 static int
 ether_tap_isr(unsigned int irq, void *id)
 {
+    struct net_device *dev;
+    struct pollfd pfd;
+    int ret;
+
+    dev = (struct net_device *)id;
+    pfd.fd = PRIV(dev)->fd;
+    pfd.events = POLLIN;
+    while (1)
+    {
+        /* タイムアウト時間を0に設定したpoll()で読み込み可能なデータの存在を確認 */
+        ret = poll(&pfd, 1, 0);
+        if (ret == -1)
+        {
+            if (errno = EINTR)
+            {
+                continue; /* errnoがEINTRの場合は再試行(シグナルに割り込まれたという回復可能なエラー) */
+            }
+            errorf("poll: %s, dev=%s", strerror(errno), dev->name);
+            return -1;
+        }
+
+        /* 戻り値が0だったらタイムアウト(読み込み可能なデータなし) */
+        if (ret == 0)
+        {
+            break; /* ループを抜ける */
+        }
+
+        /* 読み込み可能だったらether_input_helperを呼び出す */
+        ether_input_helper(dev, ether_tap_read);
+    }
+
+    return 0;
 }
 
 static struct net_device_ops ether_tap_ops = {
