@@ -145,10 +145,15 @@ ether_tap_close(struct net_device *dev)
 }
 
 static ssize_t
-ether_tap_write(struct net_device *dev, const uint8_t *frame, size_t flen) {}
+ether_tap_write(struct net_device *dev, const uint8_t *frame, size_t flen)
+{
+    return write(PRIV(dev)->fd, frame, flen);
+}
 
 int ether_tap_transmit(struct net_device *dev, uint16_t type, const uint8_t *buf, size_t len, const void *dst)
 {
+    /* 送信を行うコールバック関数としてether_tap_write()のアドレスを渡す */
+    return ether_transmit_helper(dev, type, buf, len, dst, ether_tap_write);
 }
 
 static ssize_t
