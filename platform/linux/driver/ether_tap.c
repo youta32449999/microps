@@ -42,11 +42,77 @@ ether_tap_addr(struct net_device *dev)
 static int
 ether_tap_open(struct net_device *dev)
 {
+    struct ether_tap *tap;
+    struct ifreq ifr = {}; /* ioctlで使うリクエスト/レスポンス兼用の構造体 */
+
+    tap = PRIV(dev);
+
+    /* TUN/TAP制御用デバイスをオープン */
+    tap->fd = open(CLONE_DEVICE, O_RDWR);
+    if (tap->fd == -1)
+    {
+        errorf("open: %s, dev=%s", strerror(errno), dev->name);
+        return -1;
+    }
+
+    /* TAPデバイスの名前を設定 */
+    strncpy(ifr.ifr_name, tap->name, sizeof(ifr.ifr_name) - 1);
+
+    /* フラグ設定(IFF_TAO: TAPモード、IFF_NO_PI: パケット情報ヘッダを付けない) */
+    ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
+
+    /* TAPデバイスの登録を要求 */
+    if (ioctl(tap->fd, TUNSETIFF, &ifr) == -1)
+    {
+        errorf("ioctl [TUNSETIFF]: %s, dev=%s", strerror(errno), dev->name);
+        close(tap->fd);
+        return -1;
+    }
+
+    /* シグナル駆動I/Oのための設定 */
+    /* シグナルの配送先を設定 */
+    if (fcntl(tap->fd, F_SETOWN, getpid()) == -1)
+    {
+        errorf("fcntl(FSETOWN): %s, dev=%s", strerror(errno), dev->name);
+        close(tap->fd);
+        return -1;
+    }
+
+    /* シグナル駆動I/Oを有効にする */
+    if (fcntl(tap->fd, F_SETFL, O_ASYNC) == -1)
+    {
+        errorf("fcntl(F_SETFL): %s, dev=%s", strerror(errno), dev->name);
+        close(tap->fd);
+        return -1;
+    }
+
+    /* 送信するシグナルを指定 */
+    if (fcntl(tap->fd, F_SETSIG, tap->irq) == -1)
+    {
+        errorf("fcntl(F_SETSIG): %s, dev=%s", strerror(errno), dev->name);
+        close(tap->fd);
+        return -1;
+    }
+
+    /* HWアドレスが明示的に設定されていなかったらOS側から見えているTAPデバイスのHWアドレスを取得して使用する */
+    if (memcmp(dev->addr, ETHER_ADDR_ANY, ETHER_ADDR_LEN) == 0)
+    {
+        if (ether_tap_addr(dev) == -1)
+        {
+            errorf("ether_tap_addr() failure, dev=%s", dev->name);
+            close(tap->fd);
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 static int
 ether_tap_close(struct net_device *dev)
 {
+    close(PRIV(dev)->fd); /* ディスクリプタをクローズ */
+    return 0;
 }
 
 static ssize_t
