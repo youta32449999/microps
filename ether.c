@@ -9,6 +9,7 @@
 #include "net.h"
 #include "ether.h"
 
+/* Ethernetヘッダの構造体 */
 struct ether_hdr
 {
     uint8_t dst[ETHER_ADDR_LEN];
