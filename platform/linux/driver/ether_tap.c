@@ -27,9 +27,9 @@
 
 struct ether_tap
 {
-    char name[IFNAMSIZ];
-    int fd;
-    unsigned int irq;
+    char name[IFNAMSIZ]; /* TAPデバイスの名前 */
+    int fd;              /* ファイルディスクリプタ */
+    unsigned int irq;    /* IRQ番号 */
 };
 
 #define PRIV(x) ((struct ether_tap *)x->priv)
@@ -220,4 +220,56 @@ static struct net_device_ops ether_tap_ops = {
 struct net_device *
 ether_tap_init(const char *name, const char *addr)
 {
+    struct net_device *dev;
+    struct ether_tap *tap;
+
+    /* デバイスを生成 */
+    dev = net_device_alloc();
+    if (!dev)
+    {
+        errorf("net_device_alloc() failure");
+        return NULL;
+    }
+
+    /* Ethernetデバイスの共通パラメータを設定 */
+    ether_setup_helper(dev);
+
+    /* 引数でハードウェアアドレスの文字列が渡されたらそれをバイト列に変換して設定する */
+    if (addr)
+    {
+        if (ether_addr_pton(addr, dev->addr) == -1)
+        {
+            errorf("invalid address, addr=%s", addr);
+            return NULL;
+        }
+    }
+
+    /* ドライバの関数群を設定 */
+    dev->ops = &ether_tap_ops;
+
+    /* ドライバ内部で使用するプライベートなデータを生成&保持 */
+    tap = memory_alloc(sizeof(*tap));
+    if (!tap)
+    {
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+    strncpy(tap->name, name, sizeof(tap->name) - 1);
+    tap->fd = -1; /* 初期値として無効な値(-1)を設定しておく */
+    tap->irq = ETHER_TAP_IRQ;
+    dev->priv = tap;
+
+    /* デバイスをプロトコルスタックに登録 */
+    if (net_device_register(dev) == -1)
+    {
+        errorf("net_device_register() failure");
+        memory_free(tap);
+        return NULL;
+    }
+
+    /* 割り込みハンドラを登録 */
+    intr_request_irq(tap->irq, ether_tap_isr, INTR_IRQ_SHARED, dev->name, dev);
+
+    infof("ethernet device initialized, dev=%s", dev->name);
+    return dev;
 }
