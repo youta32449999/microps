@@ -107,6 +107,40 @@ int ether_transmit_helper(struct net_device *dev, uint16_t type, const uint8_t *
 
 int ether_input_helper(struct net_device *dev, ether_input_func_t callback)
 {
+    uint8_t frame[ETHER_FRAME_SIZE_MAX];
+    ssize_t flen;
+    struct ether_hdr *hdr;
+    uint16_t type;
+
+    /* 引数で渡された関数をコールバックしてEthernetフレームを読み込む
+       (実際の読み込み処理はether_input_helper()を呼び出したドライバの関数の中で行われ、ether_input_helper()は結果だけを受け取る) */
+    flen = callback(dev, frame, sizeof(frame));
+
+    /* 読み込んだフレームのサイズがEthernetヘッダより小さかったらエラーとする */
+    if (flen < (ssize_t)sizeof(*hdr))
+    {
+        errorf("too short");
+        return -1;
+    }
+
+    /* Ethernetフレームのフィルタリング */
+    /* 宛先がデバイス自身のMACアドレスまたはブロードキャストMACアドレスであればOK。それ以外は他のホスト宛とみなして黙って破棄する */
+    hdr = (struct ether_hdr *)frame;
+    if (memcmp(dev->addr, hdr->dst, ETHER_ADDR_LEN) != 0)
+    {
+        if (memcmp(ETHER_ADDR_BROADCAST, hdr->dst, ETHER_ADDR_LEN) != 0)
+        {
+            /* for other host */
+            return -1;
+        }
+    }
+
+    type = ntoh16(hdr->type);
+    debugf("dev=%s, type=0x%04x, len=%zd", dev->name, type, flen);
+    ether_dump(frame, flen);
+
+    /* net_input_handler()を呼び出してプロトコルスタックにペイロードを渡す */
+    return net_input_handler(type, (uint8_t *)(hdr + 1), flen - sizeof(*hdr), dev);
 }
 
 void ether_setup_helper(struct net_device *dev)

@@ -31,6 +31,7 @@ ether_addr_ntop(const uint8_t *n, char *p, size_t size);
 
 /* 出力用コールバック関数のプロトタイプ宣言に別名をつける */
 typedef ssize_t (*ether_transmit_func_t)(struct net_device *dev, const uint8_t *data, size_t len);
+/* 入力用コールバック関数のプロトタイプ宣言に別名をつける */
 typedef ssize_t (*ether_input_func_t)(struct net_device *dev, uint8_t *buf, size_t size);
 
 extern int
