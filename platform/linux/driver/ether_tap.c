@@ -37,6 +37,35 @@ struct ether_tap
 static int
 ether_tap_addr(struct net_device *dev)
 {
+    int soc;
+    struct ifreq ifr = {}; /* ioctl()で使うリクエスト/レスポンス兼用の構造体 */
+
+    /* ioctl()のSIOCGIFHWADDR要求がソケットとして開かれたディスクリプタでのみ有効なため、なんでもいいのでソケットをオープンする */
+    soc = socket(AF_INET, SOCK_DGRAM, 0);
+    if (soc == -1)
+    {
+        errorf("socket: %s, dev=%s", strerror(errno), dev->name);
+        return -1;
+    }
+
+    /* ハードウェアアドレスを取得したいデバイスの名前を設定する */
+    strncpy(ifr.ifr_name, PRIV(dev)->name, sizeof(ifr.ifr_name) - 1);
+
+    /* ハードウェアアドレスの取得を要求する */
+    if (ioctl(soc, SIOCGIFHWADDR, &ifr) == -1)
+    {
+        errorf("ioctl [SIOCGIFHWADDR]: %s, dev=%s", strerror(errno), dev->name);
+        close(soc);
+        return -1;
+    }
+
+    /* 取得したアドレスをデバイス構造体へコピー */
+    memcpy(dev->addr, ifr.ifr_hwaddr.sa_data, ETHER_ADDR_LEN);
+
+    /* 使い終わったソケットをクローズ */
+    close(soc);
+
+    return 0;
 }
 
 static int
