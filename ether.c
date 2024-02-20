@@ -80,6 +80,29 @@ ether_dump(const uint8_t *frame, size_t flen)
 
 int ether_transmit_helper(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst, ether_transmit_func_t callback)
 {
+    uint8_t frame[ETHER_FRAME_SIZE_MAX] = {};
+    struct ether_hdr *hdr;
+    size_t flen, pad = 0;
+
+    /* Ethernetフレームの生成 */
+    hdr = (struct ether_hdr *)frame;
+    memcpy(hdr->dst, dst, ETHER_ADDR_LEN);
+    memcpy(hdr->src, dev->addr, ETHER_ADDR_LEN);
+    hdr->type = hton16(type);
+    memcpy(hdr + 1, data, len);
+
+    /* 最小サイズに満たない場合はパディングを挿入してサイズを調整 */
+    if (len < ETHER_PAYLOAD_SIZE_MIN)
+    {
+        pad = ETHER_PAYLOAD_SIZE_MIN - len;
+    }
+    flen = sizeof(*hdr) + len + pad;
+    debugf("dev=%s, type=0x%04x, len=%zu", dev->name, type, flen);
+    ether_dump(frame, flen);
+
+    /* 引数で渡された関数をコールバックして生成したEthernetフレームを出力する
+       ※ 実際の書き込み処理はehter_transmit_helper()を呼び出したドライバの関数の中で行われる */
+    return callback(dev, frame, flen) == (ssize_t)flen ? 0 : -1;
 }
 
 int ether_input_helper(struct net_device *dev, ether_input_func_t callback)
