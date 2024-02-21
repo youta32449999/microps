@@ -90,6 +90,53 @@ arp_reply(struct net_iface *iface, const uint8_t *tha, ip_addr_t tpa, const uint
 static void
 arp_input(const uint8_t *data, size_t len, struct net_device *dev)
 {
+    struct arp_ether_ip *msg;
+    ip_addr_t spa, tpa;
+    struct net_iface *iface;
+
+    /* 期待するARPメッセージのサイズより小さかったらエラーを返す */
+    if (len < sizeof(*msg))
+    {
+        errorf("too short");
+        return;
+    }
+
+    msg = (struct arp_ether_ip *)data;
+
+    /* ハードウェアアドレスのチェック */
+    if (ntoh16(msg->hdr.hrd) != ARP_HRD_ETHER || msg->hdr.hln != ETHER_ADDR_LEN)
+    {
+        errorf("unsupported hardware address");
+        return;
+    }
+
+    /* プロトコルアドレスのチェック */
+    if (ntoh16(msg->hdr.pro) != ARP_PRO_IP || msg->hdr.pln != IP_ADDR_LEN)
+    {
+        errorf("unsupported protocol address");
+        return;
+    }
+
+    debugf("dev=%s, len=%zu", dev->name, len);
+    arp_dump(data, len);
+
+    /* spa/tpaをmemcpy()でip_addr_tの変数へ取り出す */
+    memcpy(&spa, msg->spa, sizeof(spa));
+    memcpy(&tpa, msg->tpa, sizeof(tpa));
+
+    /* デバイスに紐づくIPインタフェースを取得する */
+    iface = net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+
+    /* ARP要求のターゲットプロトコルアドレスと一致するか確認 */
+    if (iface && ((struct ip_iface *)iface)->unicast == tpa)
+    {
+        /* ARP応答を受け取ることもあるので受け取ったARPパケットがARP要求であるかをチェックする必要がある */
+        if (ntoh16(msg->hdr.op) == ARP_OP_REQUEST)
+        {
+            /* ARP要求への応答 */
+            arp_reply(iface, msg->sha, spa, msg->sha);
+        }
+    }
 }
 
 int arp_init(void)
