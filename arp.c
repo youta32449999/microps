@@ -57,6 +57,29 @@ arp_opcode_ntoa(uint16_t opcode)
 static void
 arp_dump(const uint8_t *data, size_t len)
 {
+    struct arp_ether_ip *message;
+    ip_addr_t spa, tpa;
+    char addr[128];
+
+    message = (struct arp_ether_ip *)data; /* ここではEthernet/IPペアのメッセージとみなす */
+    flockfile(stderr);
+    fprintf(stderr, "        hrd: 0x%04x\n", ntoh16(message->hdr.hrd));
+    fprintf(stderr, "        pro: 0x%04x\n", ntoh16(message->hdr.pro));
+    fprintf(stderr, "        hln: %u\n", message->hdr.hln);
+    fprintf(stderr, "        pln: %u\n", message->hdr.pln);
+    fprintf(stderr, "         op: %u (%s)\n", ntoh16(message->hdr.op), arp_opcode_ntoa(message->hdr.op));
+    fprintf(stderr, "        sha: %s\n", ether_addr_ntop(message->sha, addr, sizeof(addr)));
+    /* ハードウェアアドレス(sha/tha): Ethernetアドレス(MACアドレス) */
+    /* プロトコルアドレス(spa/tpa): IPアドレス */
+    memcpy(&spa, message->spa, sizeof(spa)); /* spaがuint8_t[4]なので、一旦memcpy()でip_addr_tの変数へ取り出す */
+    fprintf(stderr, "        spa: %s\n", ip_addr_ntop(spa, addr, sizeof(addr)));
+    fprintf(stderr, "        tha: %s\n", ether_addr_ntop(message->tha, addr, sizeof(addr)));
+    memcpy(&tpa, message->tpa, sizeof(tpa)); /* tpaも同様にmemcpy()でip_addr_tの変数へ取り出す */
+    fprintf(stderr, "        tpa: %s\n", ip_addr_ntop(tpa, addr, sizeof(addr)));
+#ifdef HEXDUMP
+    hexdump(stderr, data, len);
+#endif
+    funlockfile(stderr);
 }
 
 static int
