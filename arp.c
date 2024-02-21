@@ -164,4 +164,11 @@ arp_input(const uint8_t *data, size_t len, struct net_device *dev)
 
 int arp_init(void)
 {
+    /* プロトコルスタックにARPの入力関数を登録する */
+    if (net_protocol_register(NET_PROTOCOL_TYPE_ARP, arp_input) == -1)
+    {
+        errorf("net_protocol_register() failure");
+        return -1;
+    }
+    return 0;
 }
