@@ -85,6 +85,29 @@ arp_dump(const uint8_t *data, size_t len)
 static int
 arp_reply(struct net_iface *iface, const uint8_t *tha, ip_addr_t tpa, const uint8_t *dst)
 {
+    struct arp_ether_ip reply;
+
+    /* ARP応答メッセージの生成 */
+    reply.hdr.hrd = hton16(ARP_HRD_ETHER);
+    reply.hdr.pro = hton16(ARP_PRO_IP);
+    reply.hdr.hln = ETHER_ADDR_LEN;
+    reply.hdr.pln = IP_ADDR_LEN;
+    reply.hdr.op = hton16(ARP_OP_REPLY);
+
+    /* インタフェースのIPアドレスと紐づくデバイスのMACアドレスを設定する */
+    memcpy(reply.sha, iface->dev->addr, ETHER_ADDR_LEN);
+    /* unicastはip_addr_pton()によってネットワークバイトオーダーの32bit値として格納されているのでバイトオーダーの変換は不要 */
+    memcpy(reply.spa, &((struct ip_iface *)iface)->unicast, IP_ADDR_LEN);
+
+    /* ARP要求を送ってきたノードのIPアドレスとMACアドレスを設定する */
+    memcpy(reply.tha, tha, ETHER_ADDR_LEN);
+    memcpy(reply.tpa, &tpa, IP_ADDR_LEN);
+
+    debugf("dev=%s, len=%zu", iface->dev->name, sizeof(reply));
+    arp_dump((uint8_t *)&reply, sizeof(reply));
+
+    /* デバイスからARPメッセージを送信 */
+    return net_device_output(iface->dev, ETHER_TYPE_ARP, (uint8_t *)&reply, sizeof(reply), dst);
 }
 
 static void
