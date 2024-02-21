@@ -336,6 +336,7 @@ void net_shutdown(void)
     debugf("shutting down");
 }
 
+#include "arp.h"
 #include "ip.h"
 #include "icmp.h"
 
@@ -345,6 +346,13 @@ int net_init(void)
     if (intr_init() == -1)
     {
         errorf("intr_init() failure");
+        return -1;
+    }
+
+    /* プロトコルスタック初期化時にARPの初期化関数を呼び出してARPをプロトコルスタックに登録する */
+    if (arp_init() == -1)
+    {
+        errorf("arp_init() failure");
         return -1;
     }
 
