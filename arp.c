@@ -199,6 +199,28 @@ arp_cache_update(ip_addr_t pa, const uint8_t *ha)
 static struct arp_cache *
 arp_cache_insert(ip_addr_t pa, const uint8_t *ha)
 {
+    struct arp_cache *cache;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[ETHER_ADDR_STR_LEN];
+
+    /* キャッシュに新しく登録するエントリの登録スペースを確保する */
+    cache = arp_cache_alloc();
+    if (!cache)
+    {
+        errorf("arp_cache_alloc failure");
+        return NULL;
+    }
+
+    /* エントリの情報を設定する */
+    cache->state = ARP_CACHE_STATE_RESOLVED;
+    cache->pa = pa;
+    memcpy(cache->ha, ha, ETHER_ADDR_LEN);
+    gettimeofday(&cache->timestamp, NULL);
+
+    debugf("INSERT: pa=%s, ha=%s", ip_addr_ntop(pa, addr1, sizeof(addr1)), ether_addr_ntop(ha, addr2, sizeof(addr2)));
+
+    /* 登録したエントリを返却する */
+    return cache;
 }
 
 static int
