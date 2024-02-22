@@ -327,6 +327,48 @@ arp_input(const uint8_t *data, size_t len, struct net_device *dev)
 
 int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
 {
+    struct arp_cache *cache;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[ETHER_ADDR_STR_LEN];
+
+    /* 念のため、物理デバイスと論理インタフェースがそれぞれEthernetとIPであることを確認 */
+    if (iface->dev->type != NET_DEVICE_TYPE_ETHERNET)
+    {
+        debugf("unsupported hardware address type");
+        return ARP_RESOLVE_ERROR;
+    }
+    if (iface->family != NET_IFACE_FAMILY_IP)
+    {
+        debugf("unsupported protocol address type");
+        return ARP_RESOLVE_ERROR;
+    }
+
+    /* ARPキャッシュのアクセスをmutexで保護 */
+    mutex_lock(&mutex);
+
+    /* プロトコルアドレスをキーにARPキャッシュを検索 */
+    cache = arp_cache_select(pa);
+    if (!cache)
+    {
+        /* 見つからなければERRORを返す */
+        debugf("cache not found, pa=%s", ip_addr_ntop(pa, addr1, sizeof(addr1)));
+
+        /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
+        mutex_unlock(&mutex);
+        return ARP_RESOLVE_ERROR;
+    }
+
+    /* 見つかったハードウェアアドレスをコピー */
+    memcpy(ha, cache->ha, ETHER_ADDR_LEN);
+
+    /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
+    mutex_unlock(&mutex);
+
+    debugf("resolved, pa=%s, ha=%s",
+           ip_addr_ntop(pa, addr1, sizeof(addr1)), ether_addr_ntop(ha, addr2, sizeof(addr2)));
+
+    /* 見つかったのでFOUNDを返す */
+    return ARP_RESOLVE_FOUND;
 }
 
 int arp_init(void)
