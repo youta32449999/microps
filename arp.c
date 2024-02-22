@@ -21,6 +21,7 @@
 
 #define ARP_CACHE_SIZE 32
 
+/* ARPキャッシュの状態を表す定数 */
 #define ARP_CACHE_STATE_FREE 0
 #define ARP_CACHE_STATE_INCOMPLETE 1
 #define ARP_CACHE_STATE_RESOLVED 2
@@ -51,16 +52,17 @@ struct arp_ether_ip
     uint8_t tpa[IP_ADDR_LEN];    /* ターゲット・プロトコルアドレス */
 };
 
+/* ARPキャッシュの構造体 */
 struct arp_cache
 {
-    unsigned char state;
-    ip_addr_t pa;
-    uint8_t ha[ETHER_ADDR_LEN];
-    struct timeval timestamp;
+    unsigned char state;        /* キャッシュの状態 */
+    ip_addr_t pa;               /* プロトコルアドレス */
+    uint8_t ha[ETHER_ADDR_LEN]; /* ハードウェアアドレス */
+    struct timeval timestamp;   /* 最終更新時刻 */
 };
 
 static mutex_t mutex = MUTEX_INITIALIZER;
-static struct arp_cache caches[ARP_CACHE_SIZE];
+static struct arp_cache caches[ARP_CACHE_SIZE]; /* ARPキャッシュの配列(ARPテーブル) */
 
 static char *
 arp_opcode_ntoa(uint16_t opcode)
