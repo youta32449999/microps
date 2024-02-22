@@ -155,11 +155,45 @@ arp_cache_alloc(void)
 static struct arp_cache *
 arp_cache_select(ip_addr_t pa)
 {
+    struct arp_cache *entry;
+    /*
+     * キャッシュの中からプロトコルアドレスが一致するエントリを探して返す
+     * 見つからなかったらNULLを返す。念のためFREE状態でないエントリの中から探す
+     */
+    for (entry = caches; entry < tailof(caches); entry++)
+    {
+        if (entry->state != ARP_CACHE_STATE_FREE && entry->pa == pa)
+        {
+            return entry;
+        }
+    }
+    return NULL;
 }
 
 static struct arp_cache *
 arp_cache_update(ip_addr_t pa, const uint8_t *ha)
 {
+    struct arp_cache *cache;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[ETHER_ADDR_STR_LEN];
+
+    /* IPアドレスに対応するエントリを取得する */
+    cache = arp_cache_select(pa);
+    if (!cache)
+    {
+        /* not found */
+        return NULL;
+    }
+
+    /* キャッシュに登録されている情報を更新する */
+    cache->state = ARP_CACHE_STATE_RESOLVED; /* IPアドレスに対応するMACアドレスが取得済みであることを表す */
+    memcpy(cache->ha, ha, ETHER_ADDR_LEN);
+    gettimeofday(&cache->timestamp, NULL); /* POSIX規格では第二引数にNULL以外の値を指定した時の挙動は未定義となっているため必ずNULLを指定する */
+
+    debugf("UPDATE: pa=%s, ha=%s", ip_addr_ntop(pa, addr1, sizeof(addr1)), ether_addr_ntop(ha, addr2, sizeof(addr2)));
+
+    /* 更新後のエントリを返却する */
+    return cache;
 }
 
 static struct arp_cache *
