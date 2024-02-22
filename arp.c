@@ -257,6 +257,7 @@ arp_input(const uint8_t *data, size_t len, struct net_device *dev)
     struct arp_ether_ip *msg;
     ip_addr_t spa, tpa;
     struct net_iface *iface;
+    int marge = 0; /* 更新の可否を示すフラグ */
 
     /* 期待するARPメッセージのサイズより小さかったらエラーを返す */
     if (len < sizeof(*msg))
@@ -288,12 +289,33 @@ arp_input(const uint8_t *data, size_t len, struct net_device *dev)
     memcpy(&spa, msg->spa, sizeof(spa));
     memcpy(&tpa, msg->tpa, sizeof(tpa));
 
+    /* キャッシュへのアクセスをミューテックスで保護 */
+    mutex_lock(&mutex);
+
+    /* ARPメッセージを受信したら、まず送信元アドレスのキャッシュ情報を更新する(更新なので未登録の場合には失敗する) */
+    if (arp_cache_update(spa, msg->sha))
+    {
+        /* updated */
+        marge = 1;
+    }
+
+    /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
+    mutex_unlock(&mutex);
+
     /* デバイスに紐づくIPインタフェースを取得する */
     iface = net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
 
     /* ARP要求のターゲットプロトコルアドレスと一致するか確認 */
     if (iface && ((struct ip_iface *)iface)->unicast == tpa)
     {
+        /* 送信元アドレスのキャッシュ情報が更新されてなかったら(未登録だったら)送信元アドレスのキャッシュ情報を新規登録する */
+        if (!marge)
+        {
+            mutex_lock(&mutex);              /* キャッシュへのアクセスをミューテックスで保護 */
+            arp_cache_insert(spa, msg->sha); /* 送信元アドレスのキャッシュ情報を新規登録する */
+            mutex_unlock(&mutex);            /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
+        }
+
         /* ARP応答を受け取ることもあるので受け取ったARPパケットがARP要求であるかをチェックする必要がある */
         if (ntoh16(msg->hdr.op) == ARP_OP_REQUEST)
         {
