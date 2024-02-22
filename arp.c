@@ -114,11 +114,42 @@ arp_dump(const uint8_t *data, size_t len)
 static void
 arp_cache_delete(struct arp_cache *cache)
 {
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[ETHER_ADDR_STR_LEN];
+
+    debugf("DELETE: pa=%s, ha=%s", ip_addr_ntop(cache->pa, addr1, sizeof(addr1)), ether_addr_ntop(cache->ha, addr2, sizeof(addr2)));
+
+    /* キャッシュのエントリを削除する */
+    cache->state = ARP_CACHE_STATE_FREE;
+    cache->pa = 0;
+    memset(cache->ha, 0, ETHER_ADDR_LEN);
+    timerclear(&cache->timestamp);
 }
 
 static struct arp_cache *
 arp_cache_alloc(void)
 {
+    struct arp_cache *entry, *oldest = NULL;
+
+    /* ARPキャッシュのテーブルを巡回 */
+    for (entry = caches; entry < tailof(caches); entry++)
+    {
+        /* 使用されてないエントリを返す */
+        if (entry->state == ARP_CACHE_STATE_FREE)
+        {
+            return entry;
+        }
+
+        /* 空きがなかったときのために一番古いエントリも一緒に探す */
+        if (!oldest || timercmp(&oldest->timestamp, &entry->timestamp, >))
+        {
+            oldest = entry;
+        }
+    }
+
+    /* 現在登録されている内容を削除をする */
+    arp_cache_delete(oldest);
+    return oldest; /* 空きがなかったら一番古いエントリを返す */
 }
 
 static struct arp_cache *
