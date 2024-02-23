@@ -355,12 +355,38 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
     cache = arp_cache_select(pa);
     if (!cache)
     {
-        /* 見つからなければERRORを返す */
         debugf("cache not found, pa=%s", ip_addr_ntop(pa, addr1, sizeof(addr1)));
+
+        /* 新しいエントリのスペースを確保 */
+        cache = arp_cache_alloc();
+        if (!cache)
+        {
+            /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
+            mutex_unlock(&mutex);
+
+            errorf("arp_cache_alloc() failure");
+            return ARP_RESOLVE_ERROR;
+        }
+        cache->state = ARP_CACHE_STATE_INCOMPLETE;
+        cache->pa = pa;
+        gettimeofday(&cache->timestamp, NULL);
 
         /* キャッシュへのアクセスが完了したのでミューテックスのアンロックを行う */
         mutex_unlock(&mutex);
-        return ARP_RESOLVE_ERROR;
+
+        /* ARP要求の送信関数を呼び出す */
+        arp_request(iface, pa);
+
+        /* 問い合わせ中なのでINCOMPLETEを返す */
+        return ARP_RESOLVE_INCOMPLETE;
+    }
+
+    /* 見つかったエントリがINCOMPLETEのままだったらパケロスしているかもしれないので念のため再送する(タイムスタンプは更新しない) */
+    if (cache->state == ARP_CACHE_STATE_INCOMPLETE)
+    {
+        mutex_unlock(&mutex);
+        arp_request(iface, pa); /* just in cace packet loss */
+        return ARP_RESOLVE_INCOMPLETE;
     }
 
     /* 見つかったハードウェアアドレスをコピー */
