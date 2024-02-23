@@ -226,6 +226,26 @@ arp_cache_insert(ip_addr_t pa, const uint8_t *ha)
 static int
 arp_request(struct net_iface *iface, ip_addr_t tpa)
 {
+    struct arp_ether_ip request;
+
+    /* ARP要求のメッセージを生成する */
+    /* ARPヘッダの設定 */
+    request.hdr.hrd = hton16(ARP_HRD_ETHER);
+    request.hdr.pro = hton16(ARP_PRO_IP);
+    request.hdr.hln = ETHER_ADDR_LEN;
+    request.hdr.pln = IP_ADDR_LEN;
+    request.hdr.op = hton16(ARP_OP_REQUEST);
+    /* ARP要求メッセージのボディの設定 */
+    memcpy(request.sha, iface->dev->addr, ETHER_ADDR_LEN);
+    memcpy(request.spa, &((struct ip_iface *)iface)->unicast, IP_ADDR_LEN);
+    memset(request.tha, 0, ETHER_ADDR_LEN);
+    memcpy(request.tpa, &tpa, IP_ADDR_LEN);
+
+    debugf("dev=%s, len=%zu", iface->dev->name, sizeof(request));
+    arp_dump((uint8_t *)&request, sizeof(request));
+
+    /* デバイスの送信関数を呼び出してARP要求のメッセージを送信する */
+    return net_device_output(iface->dev, ETHER_TYPE_ARP, (uint8_t *)&request, sizeof(request), iface->dev->broadcast);
 }
 
 static int
