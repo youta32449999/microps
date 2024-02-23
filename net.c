@@ -237,6 +237,25 @@ int net_protocol_register(uint16_t type, void (*handler)(const uint8_t *data, si
 /* NOTE: must not be call after net_run() */
 int net_timer_register(struct timeval interval, void (*handler)(void))
 {
+    struct net_timer *timer;
+
+    /* タイマーの登録 */
+    timer = memory_alloc(sizeof(*timer));
+    if (!timer)
+    {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    timer->interval = interval;
+    gettimeofday(&timer->last, NULL); /* 最後の発火時間には現在時刻を設定 */
+    timer->handler = handler;
+
+    /* タイマーリストの先頭に追加 */
+    timer->next = timers;
+    timers = timer;
+
+    infof("registered: interval={%d, %d}", interval.tv_sec, interval.tv_usec);
+    return 0;
 }
 
 int net_timer_handler(void)
