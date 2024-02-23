@@ -28,18 +28,19 @@ struct net_protocol_queue_entry
     uint8_t data[];
 };
 
+/* タイマー構造体(リストで管理) */
 struct net_timer
 {
-    struct net_timer *next;
-    struct timeval interval;
-    struct timeval last;
-    void (*handler)(void);
+    struct net_timer *next;  /* 次のタイマーへのポインタ */
+    struct timeval interval; /* 発火のインターバル */
+    struct timeval last;     /* 最後の発火時間 */
+    void (*handler)(void);   /* 発火時に呼び出す関数へのポインタ */
 };
 
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
 static struct net_device *devices;     /* デバイスリスト(リストの先頭を指すポインタ) */
 static struct net_protocol *protocols; /* 登録されているプロトコルのリスト */
-static struct net_timer *timers;
+static struct net_timer *timers;       /* タイマーのリスト */
 
 struct net_device *
 net_device_alloc(void)
