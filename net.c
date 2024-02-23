@@ -260,6 +260,26 @@ int net_timer_register(struct timeval interval, void (*handler)(void))
 
 int net_timer_handler(void)
 {
+    struct net_timer *timer;
+    struct timeval now, diff;
+
+    /* タイマーリストを巡回 */
+    for (timer = timers; timer; timer = timer->next)
+    {
+        /* 最後の発火時間からの経過時間を求める */
+        gettimeofday(&now, NULL);
+        timersub(&now, &timer->last, &diff);
+
+        /* 発火時刻を迎えているかどうかの確認 */
+        if (timercmp(&timer->interval, &diff, <) != 0 /* true (!0) or false (0) */)
+        {
+            /* タイマーの発火 */
+            timer->handler(); /* 登録されている関数を呼び出す */
+            /* gettimeofday(&timer->last, NULL);としないのはhandlerの実行時間分だけ本来の次のintervalのタイミングより遅れてしまうため */
+            timer->last = now; /* 最後の発火時間を更新 */
+        }
+    }
+    return 0;
 }
 
 /**
