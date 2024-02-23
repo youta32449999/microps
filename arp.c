@@ -426,15 +426,48 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
 static void
 arp_timer_handler(void)
 {
+    struct arp_cache *entry;
+    struct timeval now, diff;
+
+    mutex_lock(&mutex);       /* ARPキャッシュへのアクセスをmutexで保護 */
+    gettimeofday(&now, NULL); /* 現在時刻を取得 */
+
+    /* ARPキャッシュの配列を巡回 */
+    for (entry = caches; entry < tailof(caches); entry++)
+    {
+        if (entry->state != ARP_CACHE_STATE_FREE && entry->state != ARP_CACHE_STATE_STATIC) /* 未使用のエントリと静的エントリは除外 */
+        {
+            /* エントリのタイムスタンプから現在までの経過時間を求める */
+
+            timersub(&now, &entry->timestamp, &diff);
+            if (diff.tv_sec > ARP_CACHE_TIMEOUT) /* ARPキャッシュのタイムアウトの時間(ARP_CACHE_TIMEOUT)が経過したかの判定 */
+            {
+                /* タイムアウトしたエントリの削除 */
+                arp_cache_delete(entry);
+            }
+        }
+    }
+
+    mutex_unlock(&mutex); /* ARPキャッシュへの操作が完了したのでmutexをアンロック */
 }
 
 int arp_init(void)
 {
+    struct timeval interval = {1, 0}; /* ARPのタイマーハンドラを呼び出す際のインターバル(1s) */
+
     /* プロトコルスタックにARPの入力関数を登録する */
     if (net_protocol_register(NET_PROTOCOL_TYPE_ARP, arp_input) == -1)
     {
         errorf("net_protocol_register() failure");
         return -1;
     }
+
+    /* ARPタイマーハンドラを登録 */
+    if (net_timer_register(interval, arp_timer_handler) == -1)
+    {
+        errorf("net_timer_register() failure");
+        return -1;
+    }
+
     return 0;
 }
