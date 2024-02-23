@@ -82,12 +82,31 @@ int intr_raise_irq(unsigned int irq)
 static int
 intr_timer_setup(struct itimerspec *interval)
 {
+    timer_t id;
+
+    /* タイマーの作成 */
+    if (timer_create(CLOCK_REALTIME, NULL, &id) == -1)
+    {
+        errorf("timer_create: %s", strerror(errno));
+        return -1;
+    }
+
+    /* インターバルの設定 */
+    if (timer_settime(id, 0, interval, NULL) == -1)
+    {
+        errorf("timer_settime: %s", strerror(errno));
+        return -1;
+    }
+
+    return 0;
 }
 
 /* 割り込みスレッドのエントリポイント */
 static void *
 intr_thread(void *arg)
 {
+    const struct timespec ts = {0, 1000000}; /* 1ms */
+    struct itimerspec interval = {ts, ts};
     int terminate = 0, sig, err;
     struct irq_entry *entry;
 
@@ -95,6 +114,14 @@ intr_thread(void *arg)
 
     /* メインスレッドと同期を取るための処理 */
     pthread_barrier_wait(&barrier);
+
+    /* 周期処理用タイマーのセットアップ */
+    if (intr_timer_setup(&interval) == -1)
+    {
+        errorf("intr_timr_setup() failure");
+        return NULL;
+    }
+
     while (!terminate)
     {
         /* 割り込みに見立てたシグナルが発生するまで待機 */
@@ -111,6 +138,10 @@ intr_thread(void *arg)
         /* 割り込みスレッドへ終了を通知するためのシグナル */
         case SIGHUP:
             terminate = 1;
+            break;
+        /* 周期処理用タイマーが発火した際の処理 */
+        case SIGALRM:
+            net_timer_handler(); /* 登録されているタイマーを確認するために呼び出す */
             break;
         /* ソフトウェア割り込み用のシグナル */
         case SIGUSR1:
@@ -195,6 +226,8 @@ int intr_init(void)
     sigaddset(&sigmask, SIGHUP);
     /* シグナル集合にSIGUSR1を追加(ソフトウェア割り込み用) */
     sigaddset(&sigmask, SIGUSR1);
+    /* シグナル集合に周期処理用タイマー発火時に送信されるシグナルを追加 */
+    sigaddset(&sigmask, SIGALRM);
 
     return 0;
 }
