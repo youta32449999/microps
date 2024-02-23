@@ -20,6 +20,7 @@
 #define ARP_OP_REPLY 2
 
 #define ARP_CACHE_SIZE 32
+#define ARP_CACHE_TIMEOUT 30 /* seconds */
 
 /* ARPキャッシュの状態を表す定数 */
 #define ARP_CACHE_STATE_FREE 0
@@ -420,6 +421,11 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
 
     /* 見つかったのでFOUNDを返す */
     return ARP_RESOLVE_FOUND;
+}
+
+static void
+arp_timer_handler(void)
+{
 }
 
 int arp_init(void)
