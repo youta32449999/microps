@@ -31,6 +31,18 @@ struct udp_hdr
 static void
 udp_dump(const uint8_t *data, size_t len)
 {
+    struct udp_hdr *hdr;
+
+    flockfile(stderr);
+    hdr = (struct udp_hdr *)data;
+    fprintf(stderr, "        src: %u\n", ntoh16(hdr->src));
+    fprintf(stderr, "        dst: %u\n", ntoh16(hdr->dst));
+    fprintf(stderr, "        len: %u\n", ntoh16(hdr->len));
+    fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
+#ifdef HEXDUMP
+    hexdump(stderr, data, len);
+#endif
+    funlockfile(stderr);
 }
 
 static void
