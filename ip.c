@@ -135,6 +135,36 @@ ip_dump(const uint8_t *data, size_t len)
 static struct ip_route *
 ip_route_add(ip_addr_t network, ip_addr_t netmask, ip_addr_t nexthop, struct ip_iface *iface)
 {
+    struct ip_route *route;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+    char addr3[IP_ADDR_STR_LEN];
+    char addr4[IP_ADDR_STR_LEN];
+
+    /* 経路情報の作成 */
+    route = memory_alloc(sizeof(*route));
+    if (!route)
+    {
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+    route->network = network;
+    route->netmask = netmask;
+    route->nexthop = nexthop;
+    route->iface = iface;
+
+    /* ルーティングテーブル(リスト)へ新しい経路情報を追加 */
+    route->next = routes;
+    routes = route;
+
+    infof("route added: network=%s, netmask=%s, nexthop=%s, iface=%s dev=%s",
+          ip_addr_ntop(route->network, addr1, sizeof(addr1)),
+          ip_addr_ntop(route->netmask, addr2, sizeof(addr2)),
+          ip_addr_ntop(route->nexthop, addr3, sizeof(addr3)),
+          ip_addr_ntop(route->iface->unicast, addr4, sizeof(addr4)),
+          NET_IFACE(iface)->dev->name);
+
+    return route;
 }
 
 static struct ip_route *
