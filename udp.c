@@ -178,6 +178,8 @@ udp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
     struct udp_hdr *hdr;
     char addr1[IP_ADDR_STR_LEN];
     char addr2[IP_ADDR_STR_LEN];
+    struct udp_pcb *pcb;
+    struct udp_queue_entry *entry;
 
     /* ヘッダサイズに満たないデータはエラーとする */
     if (len < sizeof(*hdr))
@@ -215,6 +217,46 @@ udp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
            ip_addr_ntop(dst, addr2, sizeof(addr2)), ntoh16(hdr->dst),
            len, len - sizeof(*hdr));
     udp_dump(data, len);
+
+    /* PCBへのアクセスをmutexで保護 */
+    mutex_lock(&mutex);
+
+    /* 宛先アドレスとポート番号に対応するPCBを検索 */
+    pcb = udp_pcb_select(dst, hdr->dst);
+
+    /* PCBが見つからなければ中断(ポートを使用しているアプリケーションが存在しない) */
+    if (!pcb)
+    {
+        /* port is not in use */
+        mutex_unlock(&mutex); /* PCBへのアクセスが終わったらmutexのunlockを行う */
+        return;
+    }
+
+    /* 受信キューのエントリのメモリを確保 */
+    entry = memory_alloc(sizeof(*entry));
+    if (!entry)
+    {
+        mutex_unlock(&mutex); /* PCBへのアクセスが終わったらmutexのunlockを行う */
+        errorf("memory_alloc() failure");
+        return;
+    }
+
+    /* エントリの各項目へ値を設定する */
+    entry->foreign.addr = src;
+    entry->foreign.port = hdr->src;
+    entry->len = len - sizeof(*hdr);
+    memcpy(entry->data, hdr + 1, entry->len);
+
+    /* PCBの受信キューにエントリをプッシュ */
+    if (!queue_push(&pcb->queue, entry))
+    {
+        mutex_unlock(&mutex); /* PCBへのアクセスが終わったらmutexのunlockを行う */
+        errorf("queue_push() failure");
+        return;
+    }
+
+    debugf("queue pushed: id=%d, num=%d", udp_pcb_id(pcb), pcb->queue.num);
+    mutex_unlock(&mutex); /* PCBへのアクセスが終わったらmutexのunlockを行う */
 }
 
 ssize_t
