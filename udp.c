@@ -145,4 +145,10 @@ udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const uint8_t *data
 
 int udp_init(void)
 {
+    if (ip_protocol_register(IP_PROTOCOL_UDP, udp_input) == -1)
+    {
+        errorf("ip_protocol_register() failure");
+        return -1;
+    }
+    return 0;
 }
