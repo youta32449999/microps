@@ -82,6 +82,20 @@ udp_dump(const uint8_t *data, size_t len)
 static struct udp_pcb *
 udp_pcb_alloc(void)
 {
+    struct udp_pcb *pcb;
+
+    /* 使用されていないPCBを探して返す */
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        if (pcb->state == UDP_PCB_STATE_FREE)
+        {
+            pcb->state = UDP_PCB_STATE_OPEN;
+            return pcb;
+        }
+    }
+
+    /* 空きがなければNULLを返す */
+    return NULL;
 }
 
 static void
