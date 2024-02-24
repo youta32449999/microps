@@ -123,16 +123,51 @@ udp_pcb_release(struct udp_pcb *pcb)
 static struct udp_pcb *
 udp_pcb_select(ip_addr_t addr, uint16_t port)
 {
+    struct udp_pcb *pcb;
+
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        /* OPEN状態のPCBのみが対象 */
+        if (pcb->state == UDP_PCB_STATE_OPEN)
+        {
+            /* IPアドレスとポート番号が一致するPCBを探して返す */
+            /* IPアドレスがワイルドカード(IP_ADDR_ANY)の場合、すべてのアドレスに対して一致の判定を下す */
+            if ((pcb->local.addr == IP_ADDR_ANY || addr == IP_ADDR_ANY || pcb->local.addr == addr) && pcb->local.port == port)
+            {
+                return pcb;
+            }
+        }
+    }
+
+    /* 一致するものがなければNULLを返す */
+    return NULL;
 }
 
 static struct udp_pcb *
 udp_pcb_get(int id)
 {
+    struct udp_pcb *pcb;
+
+    /* 配列の範囲チェック(idをそのまま配列のインデックスとして使う) */
+    if (id < 0 || id >= (int)countof(pcbs))
+    {
+        /* out of range */
+        return NULL;
+    }
+    pcb = &pcbs[id];
+    /* OPEN状態でなければNULLを返す */
+    if (pcb->state != UDP_PCB_STATE_OPEN)
+    {
+        return NULL;
+    }
+    return pcb;
 }
 
 static int
 udp_pcb_id(struct udp_pcb *pcb)
 {
+    /* 配列のインデックスをidとして返す */
+    return indexof(pcbs, pcb);
 }
 
 static void
