@@ -374,4 +374,35 @@ int udp_close(int id)
 
 int udp_bind(int id, struct ip_endpoint *local)
 {
+    struct udp_pcb *pcb, *exist;
+    char ep1[IP_ENDPOINT_STR_LEN];
+    char ep2[IP_ENDPOINT_STR_LEN];
+
+    mutex_lock(&mutex);
+
+    /* IDからPCBのポインタを取得 */
+    pcb = udp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found, id=%s", id);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    /* すでに使用されているアドレスとポートの組み合わせになっていないかを確認する */
+    exist = udp_pcb_select(local->addr, local->port);
+    if (exist)
+    {
+        errorf("already in use, id=%d, want=%s, exist=%s",
+               id, ip_endpoint_ntop(local, ep1, sizeof(ep1)), ip_endpoint_ntop(&exist->local, ep2, sizeof(ep2)));
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    /* PCBにlocalの値をコピー */
+    pcb->local = *local;
+
+    debugf("bound, id=%d, local=%s", id, ip_endpoint_ntop(&pcb->local, ep1, sizeof(ep1)));
+    mutex_unlock(&mutex);
+    return 0;
 }
