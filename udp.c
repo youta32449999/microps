@@ -13,6 +13,7 @@
 
 #define UDP_PCB_SIZE 16
 
+/* コントロールブロックの状態を示す定数 */
 #define UDP_PCB_STATE_FREE 0
 #define UDP_PCB_STATE_OPEN 1
 #define UDP_PCB_STATE_CLOSING 2
@@ -36,22 +37,24 @@ struct udp_hdr
     uint16_t sum;
 };
 
+/* コントロールブロックの構造体 */
 struct udp_pcb
 {
     int state;
-    struct ip_endpoint local;
-    struct queue_head queue; /* receive queue */
+    struct ip_endpoint local; /* 自分のアドレス&ポート番号 */
+    struct queue_head queue;  /* receive queue */
 };
 
+/* 受信キューのエントリの構造体 */
 struct udp_queue_entry
 {
-    struct ip_endpoint foreign;
+    struct ip_endpoint foreign; /* 送信元のアドレス&ポート番号 */
     uint16_t len;
     uint8_t data[];
 };
 
 static mutex_t mutex = MUTEX_INITIALIZER;
-static struct udp_pcb pcbs[UDP_PCB_SIZE];
+static struct udp_pcb pcbs[UDP_PCB_SIZE]; /* コントロールブロックの配列 */
 
 static void
 udp_dump(const uint8_t *data, size_t len)
