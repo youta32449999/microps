@@ -200,6 +200,28 @@ ip_route_lookup(ip_addr_t dst)
 /* NOTE: must not be call after net_run() */
 int ip_route_set_default_gateway(struct ip_iface *iface, const char *gateway)
 {
+    ip_addr_t gw;
+
+    /* デフォルトゲートウェイのIPアドレスを文字列からバイナリ値へ変換 */
+    if (ip_addr_pton(gateway, &gw) == -1)
+    {
+        errorf("ip_addr_pton() failure, addr=%s", gateway);
+        return -1;
+    }
+
+    /*
+     *  0.0.0.0/0のサブネットワークへの経路情報として登録する
+     *
+     * network=0.0.0.0, netmask=0.0.0.0とするとこでdstとnetmaskの論理積は0.0.0.0になり必ずnetworkと一致する
+     * そのため他に有力な候補がなければデフォルトゲートウェイの設定が使用される
+     */
+    if (!ip_route_add(IP_ADDR_ANY, IP_ADDR_ANY, gw, iface))
+    {
+        errorf("ip_route_add() failure");
+        return -1;
+    }
+
+    return 0;
 }
 
 struct ip_iface *
