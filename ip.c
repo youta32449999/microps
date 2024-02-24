@@ -42,13 +42,14 @@ struct ip_protocol
     void (*handler)(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface);
 };
 
+/* 経路情報の構造体(リストで管理) */
 struct ip_route
 {
-    struct ip_route *next;
-    ip_addr_t network;
-    ip_addr_t netmask;
-    ip_addr_t nexthop;
-    struct ip_iface *iface;
+    struct ip_route *next;  /* 次の経路情報へのポインタ */
+    ip_addr_t network;      /* ネットワークアドレス */
+    ip_addr_t netmask;      /* サブネットマスク */
+    ip_addr_t nexthop;      /* 次の中継先のアドレス(なければIP_ADDR_ANY) */
+    struct ip_iface *iface; /* この経路への送信に使うインタフェース */
 };
 
 const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
@@ -57,7 +58,7 @@ const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
 static struct ip_iface *ifaces;       /* 登録されているすべてのIPインタフェースのリスト */
 static struct ip_protocol *protocols; /* 登録されているプロトコルのリスト */
-static struct ip_route *routes;
+static struct ip_route *routes;       /* 経路情報のリスト(ルーティングテーブル) */
 
 /* IPアドレスを文字列からネットワークバイトオーダーのバイナリ値(ip_addr_t)に変換 */
 int ip_addr_pton(const char *p, ip_addr_t *n)
