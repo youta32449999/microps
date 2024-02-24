@@ -230,6 +230,13 @@ int ip_iface_register(struct net_device *dev, struct ip_iface *iface)
         return -1;
     }
 
+    /* IPインタフェース登録時にそのネットワーク宛の経路情報を自動で登録する */
+    if (!ip_route_add(iface->unicast & iface->netmask, iface->netmask, IP_ADDR_ANY, iface))
+    {
+        errorf("ip_route_add() failure");
+        return -1;
+    }
+
     /* IOインタフェースのリストの先頭にifaceを挿入する */
     iface->next = ifaces;
     ifaces = iface;
