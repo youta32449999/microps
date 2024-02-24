@@ -5,9 +5,17 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include "platform.h"
+
 #include "util.h"
 #include "ip.h"
 #include "udp.h"
+
+#define UDP_PCB_SIZE 16
+
+#define UDP_PCB_STATE_FREE 0
+#define UDP_PCB_STATE_OPEN 1
+#define UDP_PCB_STATE_CLOSING 2
 
 /* 疑似ヘッダ構造体(チェックサム計算時に使用する) */
 struct pseudo_hdr
@@ -28,6 +36,23 @@ struct udp_hdr
     uint16_t sum;
 };
 
+struct udp_pcb
+{
+    int state;
+    struct ip_endpoint local;
+    struct queue_head queue; /* receive queue */
+};
+
+struct udp_queue_entry
+{
+    struct ip_endpoint foreign;
+    uint16_t len;
+    uint8_t data[];
+};
+
+static mutex_t mutex = MUTEX_INITIALIZER;
+static struct udp_pcb pcbs[UDP_PCB_SIZE];
+
 static void
 udp_dump(const uint8_t *data, size_t len)
 {
@@ -43,6 +68,37 @@ udp_dump(const uint8_t *data, size_t len)
     hexdump(stderr, data, len);
 #endif
     funlockfile(stderr);
+}
+
+/*
+ * UDP Protocol Control Block (PCB)
+ *
+ * NOTE: UDP PCB functions must be called after mutex locked
+ */
+
+static struct udp_pcb *
+udp_pcb_alloc(void)
+{
+}
+
+static void
+upd_pcb_release(struct udp_pcb *pcb)
+{
+}
+
+static struct udp_pcb *
+udp_pcb_select(ip_addr_t addr, uint16_t port)
+{
+}
+
+static struct udp_pcb *
+udp_pcb_get(int id)
+{
+}
+
+static int
+udp_pcb_id(struct udp_pcb *pcb)
+{
 }
 
 static void
@@ -151,4 +207,20 @@ int udp_init(void)
         return -1;
     }
     return 0;
+}
+
+/*
+ * UDP User Commands
+ */
+
+int udp_open(void)
+{
+}
+
+int udp_close(int id)
+{
+}
+
+int udp_bind(int id, struct ip_endpoint *local)
+{
 }
