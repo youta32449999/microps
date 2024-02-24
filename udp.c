@@ -95,6 +95,52 @@ udp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
 ssize_t
 udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const uint8_t *data, size_t len)
 {
+    uint8_t buf[IP_PAYLOAD_SIZE_MAX];
+    struct udp_hdr *hdr;
+    struct pseudo_hdr pseudo;
+    uint16_t total, psum = 0;
+    char ep1[IP_ENDPOINT_STR_LEN];
+    char ep2[IP_ENDPOINT_STR_LEN];
+
+    /* IPのペイロードに載せ切れないほど大きなデータが渡されたらエラーを返す */
+    if (len > IP_PAYLOAD_SIZE_MAX - sizeof(*hdr))
+    {
+        errorf("too long");
+        return -1;
+    }
+
+    /* UDPデータグラムの生成 */
+    hdr = (struct udp_hdr *)buf;
+    hdr->src = src->port;
+    hdr->dst = dst->port;
+    total = sizeof(*hdr) + len;
+    hdr->len = hton16(total);
+    hdr->sum = 0;
+    memcpy(hdr + 1, data, len); /* UDPのデータ部 */
+
+    /* 疑似ヘッダの生成 */
+    pseudo.src = src->addr;
+    pseudo.dst = dst->addr;
+    pseudo.zero = 0;
+    pseudo.protocol = IP_PROTOCOL_UDP;
+    pseudo.len = hton16(total);
+
+    /* 疑似ヘッダを含めたチェックサムの計算を行い、UDPヘッダに設定する */
+    psum = ~cksum16((uint16_t *)&pseudo, sizeof(pseudo), 0);
+    hdr->sum = cksum16((uint16_t *)hdr, total, psum);
+
+    debugf("%s => %s, len=%zu (payload=%zu)",
+           ip_endpoint_ntop(src, ep1, sizeof(ep1)), ip_endpoint_ntop(dst, ep2, sizeof(ep2)), total, len);
+    udp_dump((uint8_t *)hdr, total);
+
+    /* IPの送信関数の呼び出し */
+    if (ip_output(IP_PROTOCOL_UDP, (uint8_t *)hdr, total, src->addr, dst->addr) == -1)
+    {
+        errorf("ip_output() failure");
+        return -1;
+    }
+
+    return len;
 }
 
 int udp_init(void)
