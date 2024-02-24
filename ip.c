@@ -170,6 +170,31 @@ ip_route_add(ip_addr_t network, ip_addr_t netmask, ip_addr_t nexthop, struct ip_
 static struct ip_route *
 ip_route_lookup(ip_addr_t dst)
 {
+    struct ip_route *route, *candidate = NULL;
+
+    /* ルーティングテーブルを巡回 */
+    for (route = routes; route; route = route->next)
+    {
+        /* 宛先が経路情報のネットワークに含まれているか確認 */
+        if ((dst & route->netmask) == route->network)
+        {
+            /*
+             * サブネットマスクがより長く一致する経路を選択する(ロンゲストマッチ)
+             *
+             * e.g.) dst=192.0.2.1の場合
+             * route1 network=192.0.0.0,netmask=255.0.0.0(/8) => "192"までの8bit一致
+             * route2 network=192.0.0.0,netmask=255.255.0.0(/16) => "192.0"までの16bit一致
+             * route3 network=192.0.2.0,netmask=255.255.255.0(/24) => "192.0.2"までの24bit一致
+             */
+            if (!candidate || ntoh32(candidate->netmask) < ntoh32(route->netmask))
+            {
+                candidate = route; /* この時点で一番有力な候補 */
+            }
+        }
+    }
+
+    /* ロンゲストマッチで見つけた経路情報を返す */
+    return candidate;
 }
 
 /* NOTE: must not be call after net_run() */
@@ -180,6 +205,14 @@ int ip_route_set_default_gateway(struct ip_iface *iface, const char *gateway)
 struct ip_iface *
 ip_route_get_iface(ip_addr_t dst)
 {
+    struct ip_route *route;
+
+    route = ip_route_lookup(dst);
+    if (!route)
+    {
+        return NULL;
+    }
+    return route->iface; /* 経路情報の中からインタフェースを返す */
 }
 
 struct ip_iface *
