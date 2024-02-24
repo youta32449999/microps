@@ -326,10 +326,50 @@ int udp_init(void)
 
 int udp_open(void)
 {
+    struct udp_pcb *pcb;
+    int id;
+
+    /* PCBへのアクセスをmutexで保護 */
+    mutex_lock(&mutex);
+
+    /* 新しくPCBを割り当てる */
+    pcb = udp_pcb_alloc();
+    if (!pcb)
+    {
+        errorf("udp_pcb_alloc() failure");
+        mutex_unlock(&mutex); /* PCBへのアクセスが終わったのでmutexをunlock */
+        return -1;
+    }
+
+    /* 新しく割り当てたPCBのidを取得する */
+    id = udp_pcb_id(pcb);
+    mutex_unlock(&mutex); /* PCBへのアクセスが終わったのでmutexをunlock */
+
+    /* 新しく割り当てたPCBのidを返す */
+    return id;
 }
 
 int udp_close(int id)
 {
+    struct udp_pcb *pcb;
+
+    /* PCBへのアクセスをmutexで保護 */
+    mutex_lock(&mutex);
+
+    /* IDからPCBのポインタを取得 */
+    pcb = udp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found, id=%s", id);
+        mutex_unlock(&mutex); /* PCBへのアクセスが終わったのでmutexをunlock */
+        return -1;
+    }
+
+    /* PCBを解放*/
+    udp_pcb_release(pcb);
+    mutex_unlock(&mutex); /* PCBへのアクセスが終わったのでmutexをunlock */
+
+    return 0;
 }
 
 int udp_bind(int id, struct ip_endpoint *local)
