@@ -99,8 +99,25 @@ udp_pcb_alloc(void)
 }
 
 static void
-upd_pcb_release(struct udp_pcb *pcb)
+udp_pcb_release(struct udp_pcb *pcb)
 {
+    struct queue_enty *entry;
+
+    /* 値をクリア */
+    pcb->state = UDP_PCB_STATE_FREE;
+    pcb->local.addr = IP_ADDR_ANY;
+    pcb->local.port = 0;
+
+    /* 受信キューを空にする */
+    while (1)
+    {
+        entry = queue_pop(&pcb->queue);
+        if (!entry)
+        {
+            break;
+        }
+        memory_free(entry);
+    }
 }
 
 static struct udp_pcb *
