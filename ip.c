@@ -471,7 +471,7 @@ ip_output_device(struct ip_iface *iface, const uint8_t *data, size_t len, ip_add
 }
 
 static ssize_t
-ip_output_core(struct ip_iface *iface, uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, uint16_t id, uint16_t offset)
+ip_output_core(struct ip_iface *iface, uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, ip_addr_t nexthop, uint16_t id, uint16_t offset)
 {
     uint8_t buf[IP_TOTAL_SIZE_MAX];
     struct ip_hdr *hdr;
@@ -501,7 +501,7 @@ ip_output_core(struct ip_iface *iface, uint8_t protocol, const uint8_t *data, si
     ip_dump(buf, total);
 
     /* 生成したIPデータグラムを実際にデバイスから送信するための関数に渡す */
-    return ip_output_device(iface, buf, total, dst);
+    return ip_output_device(iface, buf, total, nexthop);
 }
 
 static uint16_t
@@ -520,15 +520,38 @@ ip_generate_id(void)
 ssize_t
 ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
 {
+    struct ip_route *route;
     struct ip_iface *iface;
     char addr[IP_ADDR_STR_LEN];
+    ip_addr_t nexthop;
     uint16_t id;
 
-    if (src == IP_ADDR_ANY)
+    /* 送信元アドレスが指定されない場合、255.255.255.255宛への送信はできない */
+    if (src == IP_ADDR_ANY && dst == IP_ADDR_BROADCAST)
     {
-        errorf("ip routing does not implement");
+        errorf("source address is required for broadcast addresses");
         return -1;
     }
+
+    /* 宛先アドレスへの経路情報を取得 */
+    route = ip_route_lookup(dst);
+    if (!route)
+    {
+        /* 経路情報が見つからなければ送信できない */
+        errorf("no route to host, addr=%s", ip_addr_ntop(dst, addr, sizeof(addr)));
+        return -1;
+    }
+
+    /* インタフェースのIPアドレスと異なるIPアドレスで送信できないように制限(強いエンドシステム) */
+    iface = route->iface;
+    if (src != IP_ADDR_ANY && src != iface->unicast)
+    {
+        errorf("unable to output with specified source address, addr=%s", ip_addr_ntop(src, addr, sizeof(addr)));
+        return -1;
+    }
+
+    /* nexthop: IPパケットの次の送り先(IPヘッダの宛先とは異なる) */
+    nexthop = (route->nexthop != IP_ADDR_ANY) ? route->nexthop : dst;
 
     /* フラグメンテーションをサポートしないのでMTUを超える場合はエラーを返す */
     if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len)
@@ -542,7 +565,7 @@ ip_output(uint8_t protocol, const uint8_t *data, size_t len, ip_addr_t src, ip_a
     id = ip_generate_id();
 
     /* IPデータグラムを生成して出力するための関数を呼び出す */
-    if (ip_output_core(iface, protocol, data, len, iface->unicast, dst, id, 0) == -1)
+    if (ip_output_core(iface, protocol, data, len, iface->unicast, dst, nexthop, id, 0) == -1)
     {
         errorf("ip_output_core() failure");
         return -1;
