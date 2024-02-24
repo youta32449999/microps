@@ -9,6 +9,7 @@
 #include "ip.h"
 #include "udp.h"
 
+/* 疑似ヘッダ構造体(チェックサム計算時に使用する) */
 struct pseudo_hdr
 {
     uint32_t src;
@@ -18,6 +19,7 @@ struct pseudo_hdr
     uint16_t len;
 };
 
+/* UDPヘッダ構造体 */
 struct udp_hdr
 {
     uint16_t src;

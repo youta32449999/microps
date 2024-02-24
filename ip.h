@@ -27,6 +27,7 @@
 
 typedef uint32_t ip_addr_t;
 
+/* IPアドレスとポート番号のペア */
 struct ip_endpoint
 {
     ip_addr_t addr;
