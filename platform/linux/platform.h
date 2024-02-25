@@ -82,11 +82,12 @@ intr_init(void);
  * Scheduler
  */
 
+/* タスクスケジュール用構造体 */
 struct sched_ctx
 {
-    pthread_cond_t cond;
-    int interrupted;
-    int wc; /* wait count */
+    pthread_cond_t cond; /* スレッドを休止させるために使用する条件変数 */
+    int interrupted;     /* シグナルに割り込まれたことを示すフラグ */
+    int wc;              /* 休止中のタスクの数 */
 };
 
 #define SCHED_CTX_INITIALIZER          \
