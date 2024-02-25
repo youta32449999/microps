@@ -49,7 +49,7 @@ struct udp_pcb
     int state;
     struct ip_endpoint local; /* 自分のアドレス&ポート番号 */
     struct queue_head queue;  /* receive queue */
-    int wc;                   /* waitカウント(PCBを使用中のスレッドの数) */
+    struct sched_ctx ctx;     /* スケジューラが使うコンテキスト */
 };
 
 /* 受信キューのエントリの構造体 */
@@ -97,6 +97,7 @@ udp_pcb_alloc(void)
         if (pcb->state == UDP_PCB_STATE_FREE)
         {
             pcb->state = UDP_PCB_STATE_OPEN;
+            sched_ctx_init(&pcb->ctx);
             return pcb;
         }
     }
