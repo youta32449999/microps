@@ -18,6 +18,7 @@
 #define UDP_PCB_STATE_OPEN 1
 #define UDP_PCB_STATE_CLOSING 2
 
+/* 送信元ポート番号の範囲 */
 /* see https://tools.ietf.org/html/rfc6335 */
 #define UDP_SOURCE_PORT_MIN 49152
 #define UDP_SOURCE_PORT_MAX 65535
@@ -414,6 +415,66 @@ int udp_bind(int id, struct ip_endpoint *local)
 ssize_t
 udp_sendto(int id, uint8_t *data, size_t len, struct ip_endpoint *foreign)
 {
+    struct udp_pcb *pcb;
+    struct ip_endpoint local;
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
+    uint32_t p;
+
+    mutex_lock(&mutex); /* PCBへのアクセスをmutexで保護 */
+
+    /* IDからPCBのポインタを取得 */
+    pcb = udp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found, id=%d", id);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+    local.addr = pcb->local.addr;
+
+    /* 自分の使うアドレスがワイルドカードだったら宛先アドレスに応じて送信元アドレスを自動的に選択する */
+    if (local.addr == IP_ADDR_ANY)
+    {
+        /* IPの経路情報から宛先に到達可能なインタフェースを取得 */
+        iface = ip_route_get_iface(foreign->addr);
+        if (!iface)
+        {
+            errorf("iface not found that can reach foreign address, addr=%s",
+                   ip_addr_ntop(foreign->addr, addr, sizeof(addr)));
+            mutex_unlock(&mutex);
+            return -1;
+        }
+        local.addr = iface->unicast; /* 取得したインタフェースのアドレスを使う */
+        debugf("select local address, addr=%s", ip_addr_ntop(local.addr, addr, sizeof(addr)));
+    }
+
+    /* 自分の使うポート番号が設定されていなかったら送信元ポートを自動的に選択する */
+    if (!pcb->local.port)
+    {
+        /* 送信元ポート番号の範囲から使用可能なポートを探してPCBに割り当てる(使用されてないポートを探す) */
+        for (p = UDP_SOURCE_PORT_MIN; p <= UDP_SOURCE_PORT_MAX; p++)
+        {
+            if (!udp_pcb_select(local.addr, hton16(p)))
+            {
+                pcb->local.port = hton16(p); /* このPCBで使用するポートに設定する */
+                debugf("dynamic assign local port, port=%d", p);
+                break;
+            }
+        }
+
+        /* 使用可能なポートがなかったらエラーを返す */
+        if (!pcb->local.port)
+        {
+            debugf("failed to dynamic assign local port, addr=%s", ip_addr_ntop(local.addr, addr, sizeof(addr)));
+            mutex_unlock(&mutex);
+            return -1;
+        }
+    }
+
+    local.port = pcb->local.port;
+    mutex_unlock(&mutex);
+    return udp_output(&local, foreign, data, len);
 }
 
 ssize_t
