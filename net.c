@@ -41,7 +41,7 @@ struct net_event
 {
     struct net_event *next;
     void (*handler)(void *arg);
-    void *arg;
+    void *arg; /* ハンドラへの引数 */
 };
 
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
@@ -365,14 +365,37 @@ int net_softirq_handler(void)
 /* NOTE: must not be call after net_run() */
 int net_event_subscribe(void (*handler)(void *arg), void *arg)
 {
+    struct net_event *event;
+
+    event = memory_alloc(sizeof(*event));
+    if (!event)
+    {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    event->handler = handler;
+    event->arg = arg;
+    event->next = events;
+    events = event;
+    return 0;
 }
 
 int net_event_handler(void)
 {
+    struct net_event *event;
+
+    /* イベントを購読しているすべてのハンドラを呼び出す */
+    for (event = events; event; event = event->next)
+    {
+        event->handler(event->arg);
+    }
+    return 0;
 }
 
 void net_raise_event()
 {
+    /* イベント用の割り込みを発生させる */
+    intr_raise_irq(INTR_IRQ_EVENT);
 }
 
 int net_run(void)

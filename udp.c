@@ -337,6 +337,19 @@ udp_output(struct ip_endpoint *src, struct ip_endpoint *dst, const uint8_t *data
 static void
 event_handler(void *arg)
 {
+    struct udp_pcb *pcb;
+
+    (void)arg; /* この関数ではargを使用しないことをコンパイラに明示して警告を抑制する */
+    mutex_lock(&mutex);
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        /* 有効なPCBのコンテキスト全てに割り込みを発生させる */
+        if (pcb->state == UDP_PCB_STATE_OPEN)
+        {
+            sched_interrupt(&pcb->ctx);
+        }
+    }
+    mutex_unlock(&mutex);
 }
 
 int udp_init(void)
@@ -346,6 +359,14 @@ int udp_init(void)
         errorf("ip_protocol_register() failure");
         return -1;
     }
+
+    /* イベントの購読(ハンドラを設定) */
+    if (net_event_subscribe(event_handler, NULL) == -1)
+    {
+        errorf("net_event_subscribe() failure");
+        return -1;
+    }
+
     return 0;
 }
 
