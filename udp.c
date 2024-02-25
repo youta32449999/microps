@@ -111,10 +111,16 @@ udp_pcb_release(struct udp_pcb *pcb)
 {
     struct queue_enty *entry;
 
-    /* waitカウントが0でなかったら解放できないのでCLOSING状態にして抜ける */
-    if (pcb->wc)
+    /* PCBの状態をクローズ中にする(すぐにFREEにできるとは限らないので) */
+    pcb->state = UDP_PCB_STATE_CLOSING;
+
+    /*
+     * クローズされたことを休止中のタスクに知らせるために起床させる
+     * sched_ctx_destroy()がエラーを返すのは休止中のタスクが存在する場合のみ
+     */
+    if (sched_ctx_destroy(&pcb->ctx) == -1)
     {
-        pcb->state = UDP_PCB_STATE_CLOSING;
+        sched_wakeup(&pcb->ctx);
         return;
     }
 
@@ -271,6 +277,9 @@ udp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
     }
 
     debugf("queue pushed: id=%d, num=%d", udp_pcb_id(pcb), pcb->queue.num);
+
+    /* 受信キューにエントリが追加されたことを休止中のタスクに知らせるために起床させる */
+    sched_wakeup(&pcb->ctx);
     mutex_unlock(&mutex); /* PCBへのアクセスが終わったらmutexのunlockを行う */
 }
 
