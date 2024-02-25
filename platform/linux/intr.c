@@ -147,6 +147,10 @@ intr_thread(void *arg)
         case SIGUSR1:
             net_softirq_handler();
             break;
+        /* イベント用のシグナル */
+        case SIGUSR2:
+            net_event_handler();
+            break;
         /* デバイス割り込み用のシグナル */
         default:
             /* IRQリストを巡回 */
@@ -226,6 +230,8 @@ int intr_init(void)
     sigaddset(&sigmask, SIGHUP);
     /* シグナル集合にSIGUSR1を追加(ソフトウェア割り込み用) */
     sigaddset(&sigmask, SIGUSR1);
+    /* シグナル集合にSIGUSR2を追加(イベント用) */
+    sigaddset(&sigmask, SIGUSR2);
     /* シグナル集合に周期処理用タイマー発火時に送信されるシグナルを追加 */
     sigaddset(&sigmask, SIGALRM);
 
