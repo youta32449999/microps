@@ -498,6 +498,7 @@ udp_recvfrom(int id, uint8_t *buf, size_t size, struct ip_endpoint *foreign)
     struct udp_pcb *pcb;
     struct udp_queue_entry *entry;
     ssize_t len;
+    int err;
 
     mutex_lock(&mutex); /* PCBへのアクセスをmutexで保護 */
 
@@ -519,16 +520,17 @@ udp_recvfrom(int id, uint8_t *buf, size_t size, struct ip_endpoint *foreign)
             break; /* エントリを取り出せたらループから抜ける */
         }
 
-        /* waitカウントをインクリメント */
-        pcb->wc++;
+        /* sched_wakeup()もしくはsched_interrupt()が呼ばれるまでタスクを休止 */
+        err = sched_sleep(&pcb->ctx, &mutex, NULL);
 
-        /* 受信キューにエントリが追加されるのを待つ(1秒おきにキューを確認) */
-        mutex_unlock(&mutex);
-        sleep(1);
-
-        /* waitカウントをデクリメント */
-        mutex_lock(&mutex);
-        pcb->wc--;
+        /* エラーだった場合はsched_interrup()による起床なのでerrnoにEINTRを設定してエラーを返す */
+        if (err)
+        {
+            debugf("interrupted");
+            mutex_unlock(&mutex);
+            errno = EINTR;
+            return -1;
+        }
 
         /* PCBがCLOSING状態になっていたらPCBを解放してエラーを返す */
         if (pcb->state == UDP_PCB_STATE_CLOSING)
