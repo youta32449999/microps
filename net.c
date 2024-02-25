@@ -37,10 +37,18 @@ struct net_timer
     void (*handler)(void);   /* 発火時に呼び出す関数へのポインタ */
 };
 
+struct net_event
+{
+    struct net_event *next;
+    void (*handler)(void *arg);
+    void *arg;
+};
+
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
 static struct net_device *devices;     /* デバイスリスト(リストの先頭を指すポインタ) */
 static struct net_protocol *protocols; /* 登録されているプロトコルのリスト */
 static struct net_timer *timers;       /* タイマーのリスト */
+static struct net_event *events;
 
 struct net_device *
 net_device_alloc(void)
@@ -352,6 +360,19 @@ int net_softirq_handler(void)
         }
     }
     return 0;
+}
+
+/* NOTE: must not be call after net_run() */
+int net_event_subscribe(void (*handler)(void *arg), void *arg)
+{
+}
+
+int net_event_handler(void)
+{
+}
+
+void net_raise_event()
+{
 }
 
 int net_run(void)
