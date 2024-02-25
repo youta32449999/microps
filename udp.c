@@ -48,6 +48,7 @@ struct udp_pcb
     int state;
     struct ip_endpoint local; /* 自分のアドレス&ポート番号 */
     struct queue_head queue;  /* receive queue */
+    int wc;                   /* waitカウント(PCBを使用中のスレッドの数) */
 };
 
 /* 受信キューのエントリの構造体 */
@@ -107,6 +108,13 @@ static void
 udp_pcb_release(struct udp_pcb *pcb)
 {
     struct queue_enty *entry;
+
+    /* waitカウントが0でなかったら解放できないのでCLOSING状態にして抜ける */
+    if (pcb->wc)
+    {
+        pcb->state = UDP_PCB_STATE_CLOSING;
+        return;
+    }
 
     /* 値をクリア */
     pcb->state = UDP_PCB_STATE_FREE;
@@ -480,4 +488,66 @@ udp_sendto(int id, uint8_t *data, size_t len, struct ip_endpoint *foreign)
 ssize_t
 udp_recvfrom(int id, uint8_t *buf, size_t size, struct ip_endpoint *foreign)
 {
+    struct udp_pcb *pcb;
+    struct udp_queue_entry *entry;
+    ssize_t len;
+
+    mutex_lock(&mutex); /* PCBへのアクセスをmutexで保護 */
+
+    /* IDからPCBのポインタを取得 */
+    pcb = udp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found, id=%d", id);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    while (1)
+    {
+        /* 受信キューからエントリを取り出す*/
+        entry = queue_pop(&pcb->queue);
+        if (entry)
+        {
+            break; /* エントリを取り出せたらループから抜ける */
+        }
+
+        /* waitカウントをインクリメント */
+        pcb->wc++;
+
+        /* 受信キューにエントリが追加されるのを待つ(1秒おきにキューを確認) */
+        mutex_unlock(&mutex);
+        sleep(1);
+
+        /* waitカウントをデクリメント */
+        mutex_lock(&mutex);
+        pcb->wc--;
+
+        /* PCBがCLOSING状態になっていたらPCBを解放してエラーを返す */
+        if (pcb->state == UDP_PCB_STATE_CLOSING)
+        {
+            debugf("closed");
+            udp_pcb_release(pcb);
+            mutex_unlock(&mutex);
+            return -1;
+        }
+    }
+
+    mutex_unlock(&mutex);
+
+    /* 送信元のアドレス&ポート番号をコピー */
+    if (foreign)
+    {
+        *foreign = entry->foreign;
+    }
+
+    /* バッファが小さかったら切り詰めて格納する */
+    len = MIN(size, entry->len);
+    memcpy(buf, entry->data, len);
+
+    /* 受信キューから取り出したエントリはもう使用しないのでメモリを解放する */
+    memory_free(entry);
+
+    /* バッファにコピーしたバイト数を返す */
+    return len;
 }
