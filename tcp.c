@@ -84,6 +84,53 @@ tcp_dump(const uint8_t *data, size_t len)
 static void
 tcp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface)
 {
+    struct tcp_hdr *hdr;
+    struct pseudo_hdr pseudo;
+    uint16_t psum;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+
+    /* ヘッダサイズに満たないデータはエラーとする */
+    if (len < sizeof(*hdr))
+    {
+        errorf("too short");
+        return;
+    }
+    hdr = (struct tcp_hdr *)data;
+
+    /* チェックサム計算のために疑似ヘッダを準備 */
+    pseudo.src = src;
+    pseudo.dst = dst;
+    pseudo.zero = 0;
+    pseudo.protocol = IP_PROTOCOL_TCP;
+    pseudo.len = hton16(len);
+    /* 疑似ヘッダ部分のチェックサムを計算(計算結果はビット反転されているので戻しておく) */
+    psum = ~cksum16((uint16_t *)&pseudo, sizeof(pseudo), 0);
+
+    /* TCPセグメント部分のチェックサムを計算(cksum16()の第三引数にpsumを渡すことで続きを計算できる) */
+    if (cksum16((uint16_t *)hdr, len, psum) != 0)
+    {
+        errorf("checksum error: sum=0x%04x, verify=0x%04x", ntoh16(hdr->sum), ntoh16(cksum16((uint16_t *)hdr, len, -hdr->sum + psum)));
+        return;
+    }
+
+    /*
+     * 送信先または宛先どちらかのアドレスがブロードキャストアドレスだった場合にはエラーメッセージを出力して中断する
+     * TCPヘッダに含まれている送信元(src)と宛先(dst)はポート番号なので注意
+     */
+    if (src == IP_ADDR_BROADCAST || src == iface->broadcast || dst == IP_ADDR_BROADCAST || dst == iface->broadcast)
+    {
+        errorf("only supports unicast, src=%s, dst=%s",
+               ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)));
+        return;
+    }
+
+    debugf("%s:%d => %s:%d, len=%zu (payload=%zu)",
+           ip_addr_ntop(src, addr1, sizeof(addr1)), ntoh16(hdr->src),
+           ip_addr_ntop(dst, addr2, sizeof(addr2)), ntoh16(hdr->dst),
+           len, len - sizeof(*hdr));
+    tcp_dump(data, len);
+    return;
 }
 
 int tcp_init(void)
