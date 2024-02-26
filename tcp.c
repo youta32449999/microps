@@ -9,6 +9,7 @@
 #include "ip.h"
 #include "tcp.h"
 
+/* TCPヘッダのフラグフィールドの値 */
 #define TCP_FLG_FIN 0x01
 #define TCP_FLG_SYN 0x02
 #define TCP_FLG_RST 0x04
@@ -19,6 +20,7 @@
 #define TCP_FLG_IS(x, y) ((x & 0x3f) == (y))
 #define TCP_FLG_ISSET(x, y) ((x & 0x3f) & (y) ? 1 : 0)
 
+/* 疑似ヘッダ構造体(チェックサム計算時に使用する) */
 struct pseudo_hdr
 {
     uint32_t src;
@@ -28,6 +30,7 @@ struct pseudo_hdr
     uint16_t len;
 };
 
+/* TCPヘッダ構造体 */
 struct tcp_hdr
 {
     uint16_t src;
