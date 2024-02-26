@@ -62,6 +62,23 @@ tcp_flg_ntoa(uint8_t flg)
 static void
 tcp_dump(const uint8_t *data, size_t len)
 {
+    struct tcp_hdr *hdr;
+
+    flockfile(stderr);
+    hdr = (struct tcp_hdr *)data;
+    fprintf(stderr, "        src: %u\n", ntoh16(hdr->src));
+    fprintf(stderr, "        dst: %u\n", ntoh16(hdr->dst));
+    fprintf(stderr, "        seq: %u\n", ntoh32(hdr->seq));
+    fprintf(stderr, "        ack: %u\n", ntoh32(hdr->ack));
+    fprintf(stderr, "        off: 0x%02x (%d)\n", hdr->off, (hdr->off >> 4) << 2);
+    fprintf(stderr, "        flg: 0x%02x (%s)\n", hdr->flg, tcp_flg_ntoa(hdr->flg));
+    fprintf(stderr, "        wnd: %u\n", ntoh16(hdr->wnd));
+    fprintf(stderr, "        sum: 0x%04x\n", ntoh16(hdr->sum));
+    fprintf(stderr, "         up: %u\n", ntoh16(hdr->up));
+#ifdef HEXDUMP
+    hexdump(stderr, data, len);
+#endif
+    funlockfile(stderr);
 }
 
 static void
