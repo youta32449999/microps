@@ -443,6 +443,7 @@ void net_shutdown(void)
 #include "ip.h"
 #include "icmp.h"
 #include "udp.h"
+#include "tcp.h"
 
 int net_init(void)
 {
@@ -478,6 +479,13 @@ int net_init(void)
     if (udp_init() == -1)
     {
         errorf("udp_init() failure");
+        return -1;
+    }
+
+    /* プロトコルスタック初期化時にTCPの初期化関数を呼び出してTCPをIPに登録する */
+    if (tcp_init() == -1)
+    {
+        errorf("tcp_init() failure");
         return -1;
     }
 
