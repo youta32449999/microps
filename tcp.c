@@ -88,4 +88,10 @@ tcp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
 
 int tcp_init(void)
 {
+    if (ip_protocol_register(IP_PROTOCOL_TCP, tcp_input) == -1)
+    {
+        errorf("ip_protocol_register() failure");
+        return -1;
+    }
+    return 0;
 }
