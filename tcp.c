@@ -252,6 +252,53 @@ tcp_pcb_id(struct tcp_pcb *pcb)
 static ssize_t
 tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_t *data, size_t len, struct ip_endpoint *local, struct ip_endpoint *foreign)
 {
+    uint8_t buf[IP_PAYLOAD_SIZE_MAX] = {};
+    struct tcp_hdr *hdr;
+    struct pseudo_hdr pseudo;
+    uint16_t psum;
+    uint16_t total;
+    char ep1[IP_ENDPOINT_STR_LEN];
+    char ep2[IP_ENDPOINT_STR_LEN];
+
+    /* TCPセグメントの生成 */
+    hdr = (struct tcp_hdr *)buf;
+    hdr->src = local->port;
+    hdr->dst = foreign->port;
+    hdr->seq = hton32(seq);
+    hdr->ack = hton32(ack);
+    hdr->off = (sizeof(*hdr) >> 2) << 4; /* TCPヘッダの長さ(32ビット単位なのでsizeofで求まる1バイト単位の長さを1/4にする必要がある)。DataOffsetは4bitなので左に4bit詰める必要がある */
+    hdr->flg = flg;
+    hdr->wnd = hton16(wnd);
+    hdr->sum = 0;
+    hdr->up = 0;
+    memcpy(hdr + 1, data, len); /* TCPセグメントのデータ部 */
+
+    /* 疑似ヘッダの生成 */
+    pseudo.src = local->addr;
+    pseudo.dst = foreign->addr;
+    pseudo.zero = 0;
+    pseudo.protocol = IP_PROTOCOL_TCP;
+    total = sizeof(*hdr) + len;
+    pseudo.len = hton16(total);
+
+    /* 疑似ヘッダを含めたチェックサムの計算を行い、TCPヘッダに設定する */
+    psum = ~cksum16((uint16_t *)&pseudo, sizeof(pseudo), 0);
+    hdr->sum = cksum16((uint16_t *)hdr, total, psum);
+
+    debugf("%s => %s, len=%zu (payload=%zu)",
+           ip_endpoint_ntop(local, ep1, sizeof(ep1)),
+           ip_endpoint_ntop(foreign, ep2, sizeof(ep2)),
+           total, len);
+    tcp_dump((uint8_t *)hdr, total);
+
+    /* IPの送信関数を呼び出す */
+    if (ip_output(IP_PROTOCOL_TCP, (uint8_t *)hdr, total, local->addr, foreign->addr) == -1)
+    {
+        errorf("ip_output() failure");
+        return -1;
+    }
+
+    return len;
 }
 
 static ssize_t
