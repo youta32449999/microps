@@ -358,6 +358,9 @@ tcp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
     uint16_t psum;
     char addr1[IP_ADDR_STR_LEN];
     char addr2[IP_ADDR_STR_LEN];
+    struct ip_endpoint local, foreign;
+    uint16_t hlen;
+    struct tcp_segment_info seg;
 
     /* ヘッダサイズに満たないデータはエラーとする */
     if (len < sizeof(*hdr))
@@ -399,6 +402,32 @@ tcp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
            ip_addr_ntop(dst, addr2, sizeof(addr2)), ntoh16(hdr->dst),
            len, len - sizeof(*hdr));
     tcp_dump(data, len);
+
+    /* struct ip_endpointの変数に入れ直す */
+    local.addr = dst;
+    local.port = hdr->dst;
+    foreign.addr = src;
+    foreign.port = hdr->src;
+
+    /* tcp_segment_arrives()で必要な情報(SEG.XXX)を集める */
+    hlen = (hdr->off >> 4) << 2;
+    seg.seq = ntoh32(hdr->seq);
+    seg.ack = ntoh32(hdr->ack);
+    seg.len = len - hlen;
+    if (TCP_FLG_ISSET(hdr->flg, TCP_FLG_SYN))
+    {
+        seg.len++; /* SYN flag consumes one sequence number */
+    }
+    if (TCP_FLG_ISSET(hdr->flg, TCP_FLG_FIN))
+    {
+        seg.len++; /* FIN flag consumes one sequence number */
+    }
+    seg.wnd = ntoh16(hdr->wnd);
+    seg.up = ntoh16(hdr->up);
+    mutex_lock(&mutex);
+    tcp_segment_arrives(&seg, hdr->flg, (uint8_t *)hdr + hlen, len - hlen, &local, &foreign);
+    mutex_unlock(&mutex);
+
     return;
 }
 
