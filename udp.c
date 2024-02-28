@@ -543,6 +543,8 @@ udp_recvfrom(int id, uint8_t *buf, size_t size, struct ip_endpoint *foreign)
 
     while (1)
     {
+        errorf("************ kani! kani!!! ************");
+
         /* 受信キューからエントリを取り出す*/
         entry = queue_pop(&pcb->queue);
         if (entry)
