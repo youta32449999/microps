@@ -191,6 +191,36 @@ tcp_pcb_release(struct tcp_pcb *pcb)
 static struct tcp_pcb *
 tcp_pcb_select(struct ip_endpoint *local, struct ip_endpoint *foreign)
 {
+    struct tcp_pcb *pcb, *listen_pcb = NULL;
+
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        if ((pcb->local.addr == IP_ADDR_ANY || pcb->local.addr == local->addr) && pcb->local.port == local->port)
+        {
+            /* ローカルアドレスにbind可能かどうかを調べるときは外部アドレスを指定せずに呼ばれる */
+            if (!foreign)
+            {
+                return pcb;
+            }
+
+            /* ローカルアドレスと外部アドレスが共にマッチ */
+            if (pcb->foreign.addr == foreign->addr && pcb->foreign.port == foreign->port)
+            {
+                return pcb;
+            }
+
+            /* 外部アドレスを指定せずにLISTENしていたらどんな外部アドレスでもマッチする */
+            if (pcb->state == TCP_PCB_STATE_LISTEN)
+            {
+                if (pcb->foreign.addr == IP_ADDR_ANY && pcb->foreign.port == 0)
+                {
+                    /* ローカルアドレス/外部アドレス共にマッチしたものが優先されるのですぐには返さない */
+                    listen_pcb = pcb;
+                }
+            }
+        }
+    }
+    return listen_pcb;
 }
 
 static struct tcp_pcb *
