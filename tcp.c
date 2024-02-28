@@ -226,6 +226,21 @@ tcp_pcb_select(struct ip_endpoint *local, struct ip_endpoint *foreign)
 static struct tcp_pcb *
 tcp_pcb_get(int id)
 {
+    struct tcp_pcb *pcb;
+
+    /* idが有効な範囲かの検証 */
+    if (id < 0 || id >= (int)countof(pcbs))
+    {
+        return NULL;
+    }
+
+    pcb = &pcbs[id];
+    /* 使用されてないPCBの場合は初期化処理されていない状態なので返却しない */
+    if (pcb->state == TCP_PCB_STATE_FREE)
+    {
+        return NULL;
+    }
+    return pcb;
 }
 
 static int
