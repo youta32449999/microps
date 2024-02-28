@@ -304,6 +304,22 @@ tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_
 static ssize_t
 tcp_output(struct tcp_pcb *pcb, uint8_t flg, uint8_t *data, size_t len)
 {
+    uint32_t seq;
+
+    seq = pcb->snd.nxt;
+    /* SYNフラグが指定されるのは初回送信時なのでiss(初期送信シーケンス番号)を使う */
+    if (TCP_FLG_ISSET(flg, TCP_FLG_SYN))
+    {
+        seq = pcb->iss;
+    }
+
+    if (TCP_FLG_ISSET(flg, TCP_FLG_SYN | TCP_FLG_FIN) || len)
+    {
+        /* TODO: add retransmission queue */
+    }
+
+    /* PCBの情報を使ってTCPセグメントを送信 */
+    return tcp_output_segment(seq, pcb->rcv.nxt, flg, pcb->rcv.wnd, data, len, &pcb->local, &pcb->foreign);
 }
 
 /* rfc793 - section 3.9 [Event Processing > SEGMENT ARRIVES] */
