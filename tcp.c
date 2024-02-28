@@ -71,11 +71,15 @@ struct tcp_segment_info
     uint16_t up;
 };
 
+/* コントロールブロックの構造体 */
 struct tcp_pcb
 {
+    /* コネクションの状態 */
     int state;
+    /* コネクションの両端のアドレス情報 */
     struct ip_endpoint local;
     struct ip_endpoint foreign;
+    /* 送信時に必要になる情報 */
     struct
     {
         uint32_t nxt;
@@ -86,6 +90,7 @@ struct tcp_pcb
         uint32_t wl2;
     } snd;
     uint32_t iss;
+    /* 受信時に必要になる情報 */
     struct
     {
         uint32_t nxt;
