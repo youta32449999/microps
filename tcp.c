@@ -326,6 +326,28 @@ tcp_output(struct tcp_pcb *pcb, uint8_t flg, uint8_t *data, size_t len)
 static void
 tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, size_t len, struct ip_endpoint *local, struct ip_endpoint *foreign)
 {
+    struct tcp_pcb *pcb;
+
+    pcb = tcp_pcb_select(local, foreign);
+    if (!pcb || pcb->state == TCP_PCB_STATE_CLOSED)
+    {
+        if (TCP_FLG_ISSET(flags, TCP_FLG_RST))
+        {
+            return;
+        }
+
+        /* 使用してないポートに何か飛んできたらRSTを返す */
+        if (!TCP_FLG_ISSET(flags, TCP_FLG_ACK))
+        {
+            tcp_output_segment(0, seg->seq + seg->len, TCP_FLG_RST | TCP_FLG_ACK, 0, NULL, 0, local, foreign);
+        }
+        else
+        {
+            tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+        }
+        return;
+    }
+    /* TODO: implemented in the next step */
 }
 
 static void
