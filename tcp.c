@@ -153,11 +153,39 @@ tcp_dump(const uint8_t *data, size_t len)
 static struct tcp_pcb *
 tcp_pcb_alloc(void)
 {
+    struct tcp_pcb *pcb;
+
+    /* FREE状態のPCBを見つけて、CLOSED状態に初期化して返す */
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        if (pcb->state == TCP_PCB_STATE_FREE)
+        {
+            pcb->state = TCP_PCB_STATE_CLOSED;
+            sched_ctx_init(&pcb->ctx);
+            return pcb;
+        }
+    }
+    return NULL;
 }
 
 static void
 tcp_pcb_release(struct tcp_pcb *pcb)
 {
+    char ep1[IP_ENDPOINT_STR_LEN];
+    char ep2[IP_ENDPOINT_STR_LEN];
+
+    /* PCBを利用しているタスクがいたらこのタイミングでは解放できない */
+    if (sched_ctx_destroy(&pcb->ctx) == -1)
+    {
+        /* タスクを起床させて他のタスクに解放を任せる */
+        sched_wakeup(&pcb->ctx);
+        return;
+    }
+
+    debugf("released, local=%s, foreign=%s",
+           ip_endpoint_ntop(&pcb->local, ep1, sizeof(ep1)),
+           ip_endpoint_ntop(&pcb->foreign, ep2, sizeof(ep2)));
+    memset(pcb, 0, sizeof(*pcb)); /* pcbp->state is set to TCP_PCB_STATE_FREE (= 0) */
 }
 
 static struct tcp_pcb *
