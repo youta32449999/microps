@@ -246,6 +246,7 @@ tcp_pcb_get(int id)
 static int
 tcp_pcb_id(struct tcp_pcb *pcb)
 {
+    return indexof(pcbs, pcb);
 }
 
 static ssize_t
