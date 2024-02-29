@@ -451,6 +451,28 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
     /*
      * 5th check the ACK field
      */
+    if (!TCP_FLG_ISSET(flags, TCP_FLG_ACK)) /* ACKフラグを含んでいないセグメントは破棄 */
+    {
+        /* drop segment */
+        return;
+    }
+
+    switch (pcb->state)
+    {
+    case TCP_PCB_STATE_SYN_RECEIVED:
+        if (pcb->snd.una <= seg->ack && seg->ack <= pcb->snd.nxt) /* 送信セグメントに対する妥当なACKかどうかの判断 */
+        {
+            pcb->state = TCP_PCB_STATE_ESTABLISHED; /* ESTABLISHEDの状態に移行(コネクション確立) */
+            sched_wakeup(&pcb->ctx);                /* PCBの状態が変化するのを待っているスレッドを起床させる */
+        }
+        else
+        {
+            /* 相手が次に期待しているシーケンス番号(seg->ack)を設定して、RSTフラグを含んだセグメントを送信 */
+            tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+            return;
+        }
+        break;
+    }
 
     /*
      * 6th check the URG bit (ignore)
