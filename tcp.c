@@ -355,14 +355,48 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
         /*
          * 1st check for an RST
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_RST)) /* RSTフラグを含むセグメントは無視 */
+        {
+            return;
+        }
 
         /*
          * 2nd check for an ACK
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_ACK)) /* ACKフラグを含んでいたらRSTを送信 */
+        {
+            /* 相手が次に期待しているシーケンス番号(seg->ack)を設定 */
+            tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+            return;
+        }
 
         /*
          * 3rd check for an SYN
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_SYN))
+        {
+            /* ignore: security/compartment check */
+            /* ignore: precedence check */
+
+            /* 両端の具体的なアドレスが確定する */
+            pcb->local = *local;
+            pcb->foreign = *foreign;
+
+            pcb->rcv.wnd = sizeof(pcb->buf);                     /* 受信ウィンドウのサイズを設定 */
+            pcb->rcv.nxt = seg->seq + 1;                         /* 次に受信を期待するシーケンス番号(ACKで使われる) */
+            pcb->irs = seg->seq;                                 /* 初期受信シーケンス番号の保存 */
+            pcb->iss = random();                                 /* 初期受信シーケンス番号の採番 */
+            tcp_output(pcb, TCP_FLG_SYN | TCP_FLG_ACK, NULL, 0); /* SYN+ACKの送信 */
+            pcb->snd.nxt = pcb->iss + 1;                         /* 次に送信するシーケンス番号 */
+            pcb->snd.una = pcb->iss;                             /* ACKが返ってきてない最後のシーケンス番号 */
+            pcb->state = TCP_PCB_STATE_SYN_RECEIVED;             /* SYN_RECEIVEDへ移行 */
+
+            /* ignore: Note that any other incoming control or data */
+            /* (combined with SYN) will be processed in the SYN-RECEIVED state. */
+            /* but processing of SYN and ACK should not be repeated */
+
+            return;
+        }
 
         /*
          * 4th other text or control
