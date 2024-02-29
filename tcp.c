@@ -603,8 +603,97 @@ int tcp_init(void)
 
 int tcp_open_rfc793(struct ip_endpoint *local, struct ip_endpoint *foreign, int active)
 {
+    struct tcp_pcb *pcb;
+    char ep1[IP_ENDPOINT_STR_LEN];
+    char ep2[IP_ENDPOINT_STR_LEN];
+    int state, id;
+
+    mutex_lock(&mutex);
+    pcb = tcp_pcb_alloc();
+    if (!pcb)
+    {
+        errorf("tcp_pcb_alloc() failure");
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    if (active)
+    {
+        errorf("active open does not implement");
+        tcp_pcb_release(pcb);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+    else
+    {
+        debugf("passive open: local=%s, waiting for connection...", ip_endpoint_ntop(local, ep1, sizeof(ep1)));
+        pcb->local = *local;
+        /* RFC793の仕様だと外部アドレスを限定してLISTEN可能(ソケットAPIではできない) */
+        if (foreign)
+        {
+            pcb->foreign = *foreign;
+        }
+        pcb->state = TCP_PCB_STATE_LISTEN;
+    }
+
+AGAIN:
+    state = pcb->state;
+    /* waiting for state changed */
+    while (pcb->state == state) /* PCBの状態が変化したらループを抜ける */
+    {
+        /* タスクを休止 */
+        if (sched_sleep(&pcb->ctx, &mutex, NULL) == -1)
+        {
+            /* シグナルによる割り込みが発生(EINTR) */
+            debugf("interrupted");
+            pcb->state = TCP_PCB_STATE_CLOSED;
+            tcp_pcb_release(pcb);
+            mutex_unlock(&mutex);
+            errno = EINTR;
+            return -1;
+        }
+    }
+
+    /* コネクション確立状態(ESTABLISHED)かどうかの確認 */
+    if (pcb->state != TCP_PCB_STATE_ESTABLISHED)
+    {
+        /* SYN_RECEIVEDの状態だったらリトライ */
+        if (pcb->state == TCP_PCB_STATE_SYN_RECEIVED)
+        {
+            goto AGAIN;
+        }
+        errorf("open error: %d", pcb->state);
+        /* PCBをCLOSED状態にしてリリース */
+        pcb->state = TCP_PCB_STATE_CLOSED;
+        tcp_pcb_release(pcb);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    id = tcp_pcb_id(pcb);
+    debugf("connection established: local=%s, foreign=%s",
+           ip_endpoint_ntop(&pcb->local, ep1, sizeof(ep1)), ip_endpoint_ntop(&pcb->foreign, ep2, sizeof(ep2)));
+    mutex_unlock(&mutex);
+
+    /* コネクションが確立したらPCBのIDを返す */
+    return id;
 }
 
 int tcp_close(int id)
 {
+    struct tcp_pcb *pcb;
+
+    mutex_lock(&mutex);
+    pcb = tcp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found");
+        mutex_unlock(&mutex);
+        return -1;
+    }
+    /* 暫定措置としてRSTを送信してコネクションを破棄 */
+    tcp_output(pcb, TCP_FLG_RST, NULL, 0);
+    tcp_pcb_release(pcb);
+    mutex_unlock(&mutex);
+    return 0;
 }
