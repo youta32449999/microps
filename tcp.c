@@ -809,9 +809,143 @@ int tcp_close(int id)
 ssize_t
 tcp_send(int id, uint8_t *data, size_t len)
 {
+    struct tcp_pcb *pcb;
+    ssize_t sent = 0;
+    struct ip_iface *iface;
+    size_t mss, cap, slen;
+
+    mutex_lock(&mutex);
+    pcb = tcp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found");
+        mutex_unlock(&mutex);
+        return -1;
+    }
+RETRY:
+    switch (pcb->state)
+    {
+    case TCP_PCB_STATE_ESTABLISHED:
+        /* 送信に使われるインタフェースを取得 */
+        iface = ip_route_get_iface(pcb->foreign.addr);
+        if (!iface)
+        {
+            errorf("iface not found");
+            mutex_unlock(&mutex);
+            return -1;
+        }
+        /* MSS(Max Segment Size)を計算 */
+        mss = NET_IFACE(iface)->dev->mtu - (IP_HDR_SIZE_MIN + sizeof(struct tcp_hdr));
+
+        /* 全て送信し切るまでループ処理 */
+        while (sent < (ssize_t)len)
+        {
+            /* 相手の受信バッファの状況を予測 */
+            cap = pcb->snd.wnd - (pcb->snd.nxt - pcb->snd.una);
+
+            /* 相手の受信バッファが埋まっていたら空くまで待つ */
+            if (!cap)
+            {
+                if (sched_sleep(&pcb->ctx, &mutex, NULL) == -1)
+                {
+                    debugf("interrupted");
+                    /* まだ何も送信してない状態でユーザ割り込みにより処理を中断 */
+                    if (!sent)
+                    {
+                        mutex_unlock(&mutex);
+                        errno = EINTR;
+                        return -1;
+                    }
+
+                    /* 1バイトでも送信済みの場合(戻り値で送信済みのバイト数を返す必要がある) */
+                    break;
+                }
+                /* 状態が変わっている可能性もあるので状態の確認から再試行 */
+                goto RETRY;
+            }
+
+            /* MSSのサイズで分割して送信 */
+            slen = MIN(MIN(mss, len - sent), cap);
+
+            /* ACKフラグを含める。PSHフラグは飾り程度の扱い */
+            if (tcp_output(pcb, TCP_FLG_ACK | TCP_FLG_PSH, data + sent, slen) == -1)
+            {
+                errorf("tcp_output() failure");
+                pcb->state = TCP_PCB_STATE_CLOSED;
+                tcp_pcb_release(pcb);
+                mutex_unlock(&mutex);
+                return -1;
+            }
+
+            /* 次に送信するシーケンス番号を更新 */
+            pcb->snd.nxt += slen;
+
+            /* 送信済みバイト数を更新 */
+            sent += slen;
+        }
+        break;
+    default:
+        errorf("unknown state '%u'", pcb->state);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    mutex_unlock(&mutex);
+
+    /* 送信済みバイト数を返す */
+    return sent;
 }
 
 ssize_t
 tcp_receive(int id, uint8_t *buf, size_t size)
 {
+    struct tcp_pcb *pcb;
+    size_t remain, len;
+
+    mutex_lock(&mutex);
+    pcb = tcp_pcb_get(id);
+    if (!pcb)
+    {
+        errorf("pcb not found");
+        mutex_unlock(&mutex);
+        return -1;
+    }
+RETRY:
+    switch (pcb->state)
+    {
+    case TCP_PCB_STATE_ESTABLISHED:
+        remain = sizeof(pcb->buf) - pcb->rcv.wnd;
+        /* 受信バッファにデータが存在しない場合はタスクを休止 */
+        if (!remain)
+        {
+            if (sched_sleep(&pcb->ctx, &mutex, NULL) == -1)
+            {
+                /* まだ何も受信してない状態でユーザ割り込みにより処理を中断 */
+                debugf("interrupted");
+                mutex_unlock(&mutex);
+                errno = EINTR;
+                return -1;
+            }
+            /* 状態が変わっている可能性もあるため状態確認から再試行 */
+            goto RETRY;
+        }
+        break;
+    default:
+        errorf("unknown state '%u'", pcb->state);
+        mutex_unlock(&mutex);
+        return -1;
+    }
+
+    /* bufに収まる分だけコピー */
+    len = MIN(size, remain);
+    memcpy(buf, pcb->buf, len);
+
+    /* コピー済みのデータを受信バッファから削除 */
+    memmove(pcb->buf, pcb->buf + len, remain - len);
+    pcb->rcv.wnd += len;
+
+    mutex_unlock(&mutex);
+
+    /* 受信したバイト数を返す */
+    return len;
 }
