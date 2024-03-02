@@ -394,8 +394,38 @@ tcp_retransmit_queue_cleanup(struct tcp_pcb *pcb)
 }
 
 static void
-tcp_retransmit_queue_emit(void *arg, void *data)
+tcp_retransmit_queue_emit(void *arg, void *data) /* TCPタイマの処理から定期的に呼び出される */
 {
+    struct tcp_pcb *pcb;
+    struct tcp_queue_entry *entry;
+    struct timeval now, diff, timeout;
+
+    pcb = (struct tcp_pcb *)arg;
+    entry = (struct tcp_queue_entry *)data;
+
+    /* 初回送信からの経過時間を計算 */
+    gettimeofday(&now, NULL);
+    timersub(&now, &entry->first, &diff);
+
+    /* 初回送信からの経過時間がデッドラインを超えていたらコネクションを破棄する */
+    if (diff.tv_sec >= TCP_RETRANSMIT_DEADLINE)
+    {
+        pcb->state = TCP_PCB_STATE_CLOSED;
+        sched_wakeup(&pcb->ctx);
+        return;
+    }
+
+    /* 再送予定時刻を計算 */
+    timeout = entry->last;
+    timeval_add_usec(&timeout, entry->rto);
+
+    /* 再送予定時刻を過ぎていたらTCPセグメントを再送する */
+    if (timercmp(&now, &timeout, >))
+    {
+        tcp_output_segment(entry->seq, pcb->rcv.nxt, entry->flg, pcb->rcv.wnd, entry->data, entry->len, &pcb->local, &pcb->foreign);
+        entry->last = now; /* 最終送信時刻を更新 */
+        entry->rto *= 2;   /* 再送タイムタウト(次の再送までの時間)を2倍の値で設定 */
+    }
 }
 
 static ssize_t
