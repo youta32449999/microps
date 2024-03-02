@@ -808,6 +808,19 @@ tcp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct 
 static void
 tcp_timer(void)
 {
+    struct tcp_pcb *pcb;
+
+    mutex_lock(&mutex);
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++)
+    {
+        if (pcb->state == TCP_PCB_STATE_FREE)
+        {
+            continue;
+        }
+        /* 受信キューのすべてのエントリに対してtcp_retransmit_queue_emit()を実行する */
+        queue_foreach(&pcb->queue, tcp_retransmit_queue_emit, pcb);
+    }
+    mutex_unlock(&mutex);
 }
 
 static void
@@ -828,12 +841,19 @@ event_handler(void *arg)
 
 int tcp_init(void)
 {
+    struct timeval interval = {0, 100000};
+
     if (ip_protocol_register(IP_PROTOCOL_TCP, tcp_input) == -1)
     {
         errorf("ip_protocol_register() failure");
         return -1;
     }
     net_event_subscribe(event_handler, NULL);
+    if (net_timer_register(interval, tcp_timer) == -1)
+    {
+        errorf("net_timer_register() failure");
+        return -1;
+    }
     return 0;
 }
 
