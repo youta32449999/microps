@@ -667,11 +667,11 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
     /* fall through(ESTABLISHEDでの処理を継続) */
     case TCP_PCB_STATE_ESTABLISHED:
         /* まだACKを受け取っていない送信データに対するACKかどうか */
-        if (pcb->snd.una < seg->ack && seg->ack <= pcb->snd.nxt)
+        if (pcb->snd.una < seg->ack && seg->ack <= pcb->snd.nxt) /* まだ確認が取れてないシーケンス番号が含まれるACKを受信した場合 */
         {
             /* 確認が取れているシーケンス番号の値を更新 */
             pcb->snd.una = seg->ack;
-            /* TOOD: Any segments on the retransmission queue which are thereby entirely acknowledged are removed */
+            tcp_retransmit_queue_cleanup(pcb);
             /* ignore: Users should receive positive acknowledgments for buffers
                         which have been SENT and fully acknowledged (i.e., SEND buffer should be returned with "ok" response) */
             /* 最後にウィンドウの情報を更新した時よりも後に送信されたセグメントかどうか */
