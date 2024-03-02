@@ -440,9 +440,10 @@ tcp_output(struct tcp_pcb *pcb, uint8_t flg, uint8_t *data, size_t len)
         seq = pcb->iss;
     }
 
+    /* シーケンス番号を消費するセグメントだけ再送キューへ格納する(単純なACKセグメントやRSTセグメントは対象外) */
     if (TCP_FLG_ISSET(flg, TCP_FLG_SYN | TCP_FLG_FIN) || len)
     {
-        /* TODO: add retransmission queue */
+        tcp_retransmit_queue_add(pcb, seq, flg, data, len);
     }
 
     /* PCBの情報を使ってTCPセグメントを送信 */
