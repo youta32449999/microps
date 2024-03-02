@@ -109,14 +109,15 @@ struct tcp_pcb
     struct queue_head queue; /* retransmit queue */
 };
 
+/* 再送キュー */
 struct tcp_queue_entry
 {
-    struct timeval first;
-    struct timeval last;
-    unsigned int rto; /* micor seconds */
-    uint32_t seq;
-    uint8_t flg;
-    size_t len;
+    struct timeval first; /* 初回送信時刻 */
+    struct timeval last;  /* 最終送信時刻(前回の送信時刻) */
+    unsigned int rto;     /* micor seconds. 再送タイムアウト(前回の再送時刻からこの時間が経過したら再送を実施) */
+    uint32_t seq;         /* セグメントのシーケンス番号 */
+    uint8_t flg;          /* セグメントの制御フラグ */
+    size_t len;           /* entryのdataメンバのバイト数 */
     uint8_t data[];
 };
 
