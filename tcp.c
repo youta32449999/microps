@@ -366,6 +366,31 @@ tcp_retransmit_queue_add(struct tcp_pcb *pcb, uint32_t seq, uint8_t flg, uint8_t
 static void
 tcp_retransmit_queue_cleanup(struct tcp_pcb *pcb)
 {
+    struct tcp_queue_entry *entry;
+
+    while (1)
+    {
+        /* 受信キューの先頭のエントリを覗き見る */
+        entry = queue_peek(&pcb->queue);
+        if (!entry)
+        {
+            break;
+        }
+
+        /* ACKの応答が得られてなかったら処理を抜ける */
+        if (entry->seq >= pcb->snd.una)
+        {
+            break;
+        }
+
+        /* ACKの応答が得られていたら受信キューから取り出す */
+        entry = queue_pop(&pcb->queue);
+        debugf("remove, seq=%u, flags=%s, len=%u", entry->seq, tcp_flg_ntoa(entry->flg), entry->len);
+
+        /* エントリのメモリを削除する */
+        memory_free(entry);
+    }
+    return;
 }
 
 static void
