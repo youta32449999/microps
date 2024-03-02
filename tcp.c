@@ -327,6 +327,40 @@ tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg, uint16_t wnd, uint8_
 static int
 tcp_retransmit_queue_add(struct tcp_pcb *pcb, uint32_t seq, uint8_t flg, uint8_t *data, size_t len)
 {
+    struct tcp_queue_entry *entry;
+
+    /* エントリのメモリを確保 */
+    entry = memory_alloc(sizeof(*entry) + len);
+    if (!entry)
+    {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+
+    /* 再送タイムアウトにデフォルト値を設定 */
+    entry->rto = TCP_DEFAULT_RTO;
+
+    /* セグメントのシーケンス番号と制御フラグをコピー */
+    entry->seq = seq;
+    entry->flg = flg;
+
+    /* TCPセグメントのデータ部分をコピー(制御フラグのみでデータがない場合は0バイトのコピー) */
+    entry->len = len;
+    memcpy(entry->data, data, entry->len);
+
+    /* 最終送信時刻にも同じ値を入れておく(0回目の再送時刻) */
+    gettimeofday(&entry->first, NULL);
+    entry->last = entry->first;
+
+    /* 再送キューにエントリを格納 */
+    if (!queue_push(&pcb->queue, entry))
+    {
+        errorf("queue_push() failure");
+        memory_free(entry);
+        return -1;
+    }
+
+    return 0;
 }
 
 static void
