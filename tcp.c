@@ -536,6 +536,21 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
         /*
          * 1st check the ACK bit
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_ACK))
+        {
+            /* 送信していないシーケンス番号に対するACKだったらRSTを返す */
+            if (seg->ack <= pcb->iss || seg->ack > pcb->snd.nxt)
+            {
+                tcp_output_segment(seg->ack, 0, TCP_FLG_RST, 0, NULL, 0, local, foreign);
+                return;
+            }
+
+            /* まだACKの応答が得られていないシーケンス番号に対するものだったら受け入れる */
+            if (pcb->snd.una <= seg->ack && seg->ack <= pcb->snd.nxt)
+            {
+                acceptable = 1;
+            }
+        }
 
         /*
          * 2nd check the RST bit
@@ -548,7 +563,48 @@ tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags, uint8_t *data, 
         /*
          * 4th check the SYN bit
          */
+        if (TCP_FLG_ISSET(flags, TCP_FLG_SYN))
+        {
+            pcb->rcv.nxt = seg->seq + 1; /* 次に受信すべきシーケンス番号を更新する */
+            pcb->irs = seg->seq;         /* 相手の初期シーケンス番号を保存する */
 
+            /* ACKを受け入れた際の処理 */
+            if (acceptable)
+            {
+                /* 未確認のシーケンス番号を更新(ACKの値は「次に受信すべきシーケンス番号」を示すのでACKの値と同一のシーケンス番号の確認は取れていない) */
+                pcb->snd.una = seg->ack;
+
+                /* 再送キューからACKによって到達が確認できているTCPセグメントを削除 */
+                tcp_retransmit_queue_cleanup(pcb);
+            }
+
+            /* 初期シーケンス番号(つまりSYN)に対するACKが得られていた場合の処理 */
+            if (pcb->snd.una > pcb->iss)
+            {
+                pcb->state = TCP_PCB_STATE_ESTABLISHED; /* ESTABLISHED状態に移行 */
+                tcp_output(pcb, TCP_FLG_ACK, NULL, 0);  /* 相手のSYNに対するACKを返す */
+
+                /* NOTE: not specified in the RFC793, but send window initialization required */
+                /* RFC73には明記されていない(ように見える)が必要な処理 */
+                pcb->snd.wnd = seg->wnd;
+                pcb->snd.wl1 = seg->seq;
+                pcb->snd.wl2 = seg->ack;
+
+                /* 状態の変化を待つために休止しているタスクを起床 */
+                sched_wakeup(&pcb->ctx);
+
+                /* ignore: continue processing at the sixth step below where the URG bit is checked */
+                return;
+            }
+            else
+            {
+                /* 同時オープン（両方が同時にSYNを送った場合)に対処するためのコード */
+                pcb->state = TCP_PCB_STATE_SYN_RECEIVED;
+                tcp_output(pcb, TCP_FLG_SYN | TCP_FLG_ACK, NULL, 0);
+                /* ignore: If there are other controls or text in the segment, queue them for processing after the ESTABLISHED state has been reached */
+                return;
+            }
+        }
         /*
          * 5th, if neither of the SYN or RST bits is set then drop the segment and return
          */
