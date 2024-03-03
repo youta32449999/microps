@@ -879,10 +879,26 @@ int tcp_open_rfc793(struct ip_endpoint *local, struct ip_endpoint *foreign, int 
 
     if (active)
     {
-        errorf("active open does not implement");
-        tcp_pcb_release(pcb);
-        mutex_unlock(&mutex);
-        return -1;
+        debugf("active open: local=%s, foreign=%s, connectiong...",
+               ip_endpoint_ntop(local, ep1, sizeof(ep1)), ip_endpoint_ntop(foreign, ep2, sizeof(ep2)));
+        pcb->local = *local;
+        pcb->foreign = *foreign;
+        pcb->rcv.wnd = sizeof(pcb->buf);
+        pcb->iss = random(); /* シーケンス番号の初期値を採番 */
+
+        /* SYNセグメントを送信 */
+        if (tcp_output(pcb, TCP_FLG_SYN, NULL, 0) == -1)
+        {
+            errorf("tcp_output() failre");
+            pcb->state = TCP_PCB_STATE_CLOSED;
+            tcp_pcb_release(pcb);
+            mutex_unlock(&mutex);
+            return -1;
+        }
+
+        pcb->snd.una = pcb->iss;             /* まだACKの確認が得られていないシーケンス番号として設定 */
+        pcb->snd.nxt = pcb->iss + 1;         /* 次に送信すべきシーケンス番号を設定 */
+        pcb->state = TCP_PCB_STATE_SYN_SENT; /* SYN-SENT状態へ移行 */
     }
     else
     {
